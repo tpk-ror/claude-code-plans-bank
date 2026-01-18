@@ -19,6 +19,7 @@ feature-{extracted-name}-{MM.DD.YY}.md
 ```
 
 **Before:** `~/.claude/plans/groovy-gathering-chipmunk.md`
+
 **After:** `./plans/feature-add-user-authentication-01.18.26.md`
 
 ## Quick Start
