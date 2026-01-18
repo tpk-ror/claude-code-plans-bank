@@ -19,7 +19,9 @@
     "chokidar": "^3.5.3",
     "express": "^4.18.2",
     "gray-matter": "^4.0.3",
-    "node-pty": "^1.0.0",
     "ws": "^8.16.0"
+  },
+  "optionalDependencies": {
+    "node-pty": "^1.0.0"
   }
 }
