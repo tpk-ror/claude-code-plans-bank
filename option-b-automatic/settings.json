@@ -1,0 +1,16 @@
+{
+  "plansDirectory": "./plans",
+  "hooks": {
+    "Stop": [
+      {
+        "matcher": "*",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "~/.claude/hooks/organize-plan.sh"
+          }
+        ]
+      }
+    ]
+  }
+}
