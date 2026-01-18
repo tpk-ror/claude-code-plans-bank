@@ -16,7 +16,9 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 CLAUDE_DIR="$HOME/.claude"
 COMMANDS_DIR="$CLAUDE_DIR/commands"
 HOOKS_DIR="$CLAUDE_DIR/hooks"
+SHARED_DIR="$CLAUDE_DIR/shared"
 SETTINGS_FILE="$CLAUDE_DIR/settings.json"
+CONFIG_FILE="$CLAUDE_DIR/plans-bank-config.json"
 
 # Print colored output
 print_header() {
@@ -35,18 +37,24 @@ print_error() {
     echo -e "${RED}$1${NC}"
 }
 
-# Install slash command (Option A)
+# Install slash commands (Option A)
 install_slash_command() {
-    print_header "Installing slash command..."
+    print_header "Installing slash commands..."
 
     # Create commands directory
     mkdir -p "$COMMANDS_DIR"
 
-    # Copy the save-plan.md file
+    # Copy all slash command files
     cp "$SCRIPT_DIR/option-a-slash-command/save-plan.md" "$COMMANDS_DIR/save-plan.md"
+    cp "$SCRIPT_DIR/option-a-slash-command/list-plans.md" "$COMMANDS_DIR/list-plans.md"
+    cp "$SCRIPT_DIR/option-a-slash-command/search-plans.md" "$COMMANDS_DIR/search-plans.md"
+    cp "$SCRIPT_DIR/option-a-slash-command/archive-plan.md" "$COMMANDS_DIR/archive-plan.md"
 
-    print_success "Slash command installed to: $COMMANDS_DIR/save-plan.md"
-    echo "  Usage: /save-plan [custom-name] [--commit]"
+    print_success "Slash commands installed to: $COMMANDS_DIR/"
+    echo "  - /save-plan [custom-name] [--commit]"
+    echo "  - /list-plans [--global | --local]"
+    echo "  - /search-plans <term> [--case-sensitive] [--global | --local]"
+    echo "  - /archive-plan [filename] [--older-than Nd] [--all-default] [--list]"
 }
 
 # Install automatic hook (Option B)
@@ -138,11 +146,17 @@ install_plugin() {
     print_header "Installing Quick Plugin (Option C)..."
     echo ""
 
-    # Install slash command
-    print_header "Step 1: Installing slash command..."
+    # Install slash commands
+    print_header "Step 1: Installing slash commands..."
     mkdir -p "$COMMANDS_DIR"
     cp "$SCRIPT_DIR/option-a-slash-command/save-plan.md" "$COMMANDS_DIR/save-plan.md"
+    cp "$SCRIPT_DIR/option-a-slash-command/list-plans.md" "$COMMANDS_DIR/list-plans.md"
+    cp "$SCRIPT_DIR/option-a-slash-command/search-plans.md" "$COMMANDS_DIR/search-plans.md"
+    cp "$SCRIPT_DIR/option-a-slash-command/archive-plan.md" "$COMMANDS_DIR/archive-plan.md"
     print_success "  Installed: $COMMANDS_DIR/save-plan.md"
+    print_success "  Installed: $COMMANDS_DIR/list-plans.md"
+    print_success "  Installed: $COMMANDS_DIR/search-plans.md"
+    print_success "  Installed: $COMMANDS_DIR/archive-plan.md"
     echo ""
 
     # Install hook script
@@ -198,30 +212,190 @@ install_plugin() {
     fi
 }
 
+# Merge always-on hook configuration into existing settings.json using jq
+configure_always_on_hooks() {
+    local temp_file=$(mktemp)
+
+    # Define our hooks
+    local session_start_hook='{"type": "command", "command": "~/.claude/hooks/plans-bank-sync.sh session-start"}'
+    local stop_hook='{"type": "command", "command": "~/.claude/hooks/plans-bank-sync.sh stop"}'
+
+    # Check if we need to add SessionStart hook
+    if ! jq -e '.hooks.SessionStart[].hooks[] | select(.command | contains("plans-bank-sync.sh"))' "$SETTINGS_FILE" > /dev/null 2>&1; then
+        if jq -e '.hooks.SessionStart' "$SETTINGS_FILE" > /dev/null 2>&1; then
+            # SessionStart exists, add our hook
+            jq ".hooks.SessionStart[0].hooks += [$session_start_hook]" "$SETTINGS_FILE" > "$temp_file"
+            mv "$temp_file" "$SETTINGS_FILE"
+        elif jq -e '.hooks' "$SETTINGS_FILE" > /dev/null 2>&1; then
+            # hooks exists but no SessionStart
+            jq ".hooks.SessionStart = [{\"matcher\": \"*\", \"hooks\": [$session_start_hook]}]" "$SETTINGS_FILE" > "$temp_file"
+            mv "$temp_file" "$SETTINGS_FILE"
+        else
+            # No hooks at all
+            jq ". + {\"hooks\": {\"SessionStart\": [{\"matcher\": \"*\", \"hooks\": [$session_start_hook]}]}}" "$SETTINGS_FILE" > "$temp_file"
+            mv "$temp_file" "$SETTINGS_FILE"
+        fi
+    fi
+
+    # Check if we need to add Stop hook
+    if ! jq -e '.hooks.Stop[].hooks[] | select(.command | contains("plans-bank-sync.sh"))' "$SETTINGS_FILE" > /dev/null 2>&1; then
+        if jq -e '.hooks.Stop' "$SETTINGS_FILE" > /dev/null 2>&1; then
+            # Stop exists, add our hook
+            jq ".hooks.Stop[0].hooks += [$stop_hook]" "$SETTINGS_FILE" > "$temp_file"
+            mv "$temp_file" "$SETTINGS_FILE"
+        elif jq -e '.hooks' "$SETTINGS_FILE" > /dev/null 2>&1; then
+            # hooks exists but no Stop
+            jq ".hooks.Stop = [{\"matcher\": \"*\", \"hooks\": [$stop_hook]}]" "$SETTINGS_FILE" > "$temp_file"
+            mv "$temp_file" "$SETTINGS_FILE"
+        fi
+    fi
+
+    rm -f "$temp_file"
+}
+
+# Install always-on auto-save (Option D)
+install_always_on() {
+    print_header "Installing Always-On Auto-Save (Option D)..."
+    echo ""
+
+    # Install sync hook script
+    print_header "Step 1: Installing sync hook script..."
+    mkdir -p "$HOOKS_DIR"
+    cp "$SCRIPT_DIR/option-d-always-on/hooks/plans-bank-sync.sh" "$HOOKS_DIR/plans-bank-sync.sh"
+    chmod +x "$HOOKS_DIR/plans-bank-sync.sh"
+    print_success "  Installed: $HOOKS_DIR/plans-bank-sync.sh"
+    echo ""
+
+    # Install shared utilities
+    print_header "Step 2: Installing shared utilities..."
+    mkdir -p "$SHARED_DIR"
+    cp "$SCRIPT_DIR/shared/plan-utils.sh" "$SHARED_DIR/plan-utils.sh"
+    print_success "  Installed: $SHARED_DIR/plan-utils.sh"
+    echo ""
+
+    # Install sync-status command
+    print_header "Step 3: Installing sync-status command..."
+    mkdir -p "$COMMANDS_DIR"
+    cp "$SCRIPT_DIR/option-d-always-on/commands/sync-status.md" "$COMMANDS_DIR/sync-status.md"
+    print_success "  Installed: $COMMANDS_DIR/sync-status.md"
+    echo ""
+
+    # Install configuration file
+    print_header "Step 4: Installing configuration..."
+    if [[ ! -f "$CONFIG_FILE" ]]; then
+        cp "$SCRIPT_DIR/option-d-always-on/config/plans-bank-config.json" "$CONFIG_FILE"
+        print_success "  Created: $CONFIG_FILE"
+    else
+        print_warning "  Config already exists: $CONFIG_FILE (keeping existing)"
+    fi
+    echo ""
+
+    # Handle settings.json
+    print_header "Step 5: Configuring settings.json..."
+    if [[ ! -f "$SETTINGS_FILE" ]]; then
+        # No existing settings, copy our template
+        cp "$SCRIPT_DIR/option-d-always-on/settings.json" "$SETTINGS_FILE"
+        print_success "  Created: $SETTINGS_FILE"
+    elif has_jq; then
+        # Existing settings with jq available - merge
+        configure_always_on_hooks
+        print_success "  Merged hook configuration into existing settings.json"
+    else
+        # Existing settings without jq
+        print_warning "  Existing settings.json found, but jq not available for auto-merge"
+        echo ""
+        echo "Add these hooks to your ~/.claude/settings.json:"
+        echo ""
+        echo '  "hooks": {'
+        echo '    "SessionStart": [{'
+        echo '      "matcher": "*",'
+        echo '      "hooks": [{"type": "command", "command": "~/.claude/hooks/plans-bank-sync.sh session-start"}]'
+        echo '    }],'
+        echo '    "Stop": [{'
+        echo '      "matcher": "*",'
+        echo '      "hooks": [{"type": "command", "command": "~/.claude/hooks/plans-bank-sync.sh stop"}]'
+        echo '    }]'
+        echo '  }'
+        echo ""
+        echo "Tip: Install jq for auto-merge: brew install jq (macOS) or apt install jq (Linux)"
+    fi
+    echo ""
+
+    print_success "Always-On Auto-Save installed!"
+    echo ""
+    echo "What happens now:"
+    echo "  - Plans are automatically synced from ~/.claude/plans/ to ./plans/"
+    echo "  - SessionStart hook: Syncs plans when Claude Code starts"
+    echo "  - Stop hook: Syncs plans when Claude Code stops"
+    echo "  - Use /sync-status to check sync status"
+    echo ""
+    echo "Configuration: $CONFIG_FILE"
+}
+
+# Install everything (A + B + D)
+install_everything() {
+    print_header "Installing Everything (Options A + B + D)..."
+    echo ""
+
+    # Install slash commands (Option A)
+    install_slash_command
+    echo ""
+
+    # Install automatic hook (Option B)
+    install_automatic
+    echo ""
+
+    # Install always-on (Option D)
+    install_always_on
+}
+
 # Uninstall everything
 uninstall() {
     print_header "Uninstalling claude-code-plans-bank..."
 
     local removed=false
 
-    if [[ -f "$COMMANDS_DIR/save-plan.md" ]]; then
-        rm "$COMMANDS_DIR/save-plan.md"
-        print_success "Removed: $COMMANDS_DIR/save-plan.md"
-        removed=true
-    fi
+    # Remove all slash commands
+    for cmd in save-plan list-plans search-plans archive-plan sync-status; do
+        if [[ -f "$COMMANDS_DIR/${cmd}.md" ]]; then
+            rm "$COMMANDS_DIR/${cmd}.md"
+            print_success "Removed: $COMMANDS_DIR/${cmd}.md"
+            removed=true
+        fi
+    done
 
+    # Remove Option B hook
     if [[ -f "$HOOKS_DIR/organize-plan.sh" ]]; then
         rm "$HOOKS_DIR/organize-plan.sh"
         print_success "Removed: $HOOKS_DIR/organize-plan.sh"
         removed=true
     fi
 
-    if [[ -f "$CLAUDE_DIR/shared/plan-utils.sh" ]]; then
-        rm "$CLAUDE_DIR/shared/plan-utils.sh"
-        print_success "Removed: $CLAUDE_DIR/shared/plan-utils.sh"
-        # Remove shared directory if empty
-        rmdir "$CLAUDE_DIR/shared" 2>/dev/null || true
+    # Remove Option D hook
+    if [[ -f "$HOOKS_DIR/plans-bank-sync.sh" ]]; then
+        rm "$HOOKS_DIR/plans-bank-sync.sh"
+        print_success "Removed: $HOOKS_DIR/plans-bank-sync.sh"
         removed=true
+    fi
+
+    # Remove shared utilities
+    if [[ -f "$SHARED_DIR/plan-utils.sh" ]]; then
+        rm "$SHARED_DIR/plan-utils.sh"
+        print_success "Removed: $SHARED_DIR/plan-utils.sh"
+        # Remove shared directory if empty
+        rmdir "$SHARED_DIR" 2>/dev/null || true
+        removed=true
+    fi
+
+    # Remove config file (ask first)
+    if [[ -f "$CONFIG_FILE" ]]; then
+        read -p "Remove configuration file ($CONFIG_FILE)? [y/N] " remove_config
+        if [[ "$remove_config" =~ ^[Yy]$ ]]; then
+            rm "$CONFIG_FILE"
+            print_success "Removed: $CONFIG_FILE"
+        else
+            print_warning "Kept: $CONFIG_FILE"
+        fi
     fi
 
     if [[ "$removed" = false ]]; then
@@ -238,7 +412,7 @@ main() {
     echo "=================================="
     echo ""
     echo "Organize your Claude Code plan files with descriptive naming."
-    echo "Format: feature-{name}-{MM.DD.YY}.md"
+    echo "Format: {category}-{name}-{MM.DD.YY}.md"
     echo ""
     echo "Choose an installation option:"
     echo ""
@@ -248,21 +422,27 @@ main() {
     echo ""
     echo "  2) Automatic Hook (Option B)"
     echo "     - Renames files automatically on session stop"
-    echo "     - Requires settings.json configuration"
+    echo "     - Works with files already in ./plans/"
     echo ""
-    echo "  3) Both options (A + B)"
-    echo "     - Install slash command AND automatic hook"
-    echo ""
-    echo -e "  ${GREEN}4) Quick Plugin (Option C) - RECOMMENDED${NC}"
-    echo "     - Installs everything (slash command + hook + utilities)"
+    echo "  3) Quick Plugin (Option C)"
+    echo "     - Installs slash command + automatic hook"
     echo "     - Auto-merges settings.json if jq is available"
     echo ""
-    echo "  5) Uninstall"
-    echo "     - Remove installed components"
+    echo -e "  ${GREEN}4) Always-On Auto-Save (Option D) - RECOMMENDED${NC}"
+    echo "     - Syncs plans from ~/.claude/plans/ to ./plans/"
+    echo "     - Hooks: SessionStart + Stop"
+    echo "     - Auto-categorizes: bugfix, refactor, docs, test, feature"
+    echo "     - Includes /sync-status command"
     echo ""
-    echo "  6) Exit"
+    echo "  5) Install Everything (A + B + D)"
+    echo "     - All slash commands + all hooks"
     echo ""
-    read -p "Enter choice [1-6]: " choice
+    echo "  6) Uninstall"
+    echo "     - Remove all installed components"
+    echo ""
+    echo "  7) Exit"
+    echo ""
+    read -p "Enter choice [1-7]: " choice
 
     case $choice in
         1)
@@ -272,22 +452,23 @@ main() {
             install_automatic
             ;;
         3)
-            install_slash_command
-            echo ""
-            install_automatic
-            ;;
-        4)
             install_plugin
             ;;
+        4)
+            install_always_on
+            ;;
         5)
-            uninstall
+            install_everything
             ;;
         6)
+            uninstall
+            ;;
+        7)
             echo "Goodbye!"
             exit 0
             ;;
         *)
-            print_error "Invalid choice. Please enter 1-6."
+            print_error "Invalid choice. Please enter 1-7."
             exit 1
             ;;
     esac
@@ -297,9 +478,11 @@ main() {
     echo ""
     echo "Next steps:"
     echo "  1. Create a plan in Claude Code (use plan mode)"
-    echo "  2. Run /save-plan to organize it (Option A/C)"
-    echo "     OR let it auto-organize on session stop (Option B/C)"
+    echo "  2. Run /save-plan to organize it (Options A/C)"
+    echo "     OR let it auto-sync from ~/.claude/plans/ (Option D)"
+    echo "     OR let it auto-organize on session stop (Option B)"
     echo "  3. Find your plans in ./plans/ with descriptive names"
+    echo "  4. Use /sync-status to check sync status (Option D)"
     echo ""
 }
 

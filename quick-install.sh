@@ -21,6 +21,7 @@ COMMANDS_DIR="$CLAUDE_DIR/commands"
 HOOKS_DIR="$CLAUDE_DIR/hooks"
 SHARED_DIR="$CLAUDE_DIR/shared"
 SETTINGS_FILE="$CLAUDE_DIR/settings.json"
+CONFIG_FILE="$CLAUDE_DIR/plans-bank-config.json"
 
 # Print functions
 print_header() {
@@ -68,35 +69,50 @@ download_file() {
 
 # Merge hook configuration into existing settings.json using jq
 merge_settings_with_jq() {
-    local hook_config='{
-        "type": "command",
-        "command": "~/.claude/hooks/organize-plan.sh"
-    }'
-
     local temp_file=$(mktemp)
+    local modified=false
 
-    # Check if hooks.Stop exists and merge appropriately
-    if jq -e '.hooks.Stop' "$SETTINGS_FILE" > /dev/null 2>&1; then
-        # Stop hook exists, add our hook to it if not already present
-        if ! jq -e '.hooks.Stop[].hooks[] | select(.command == "~/.claude/hooks/organize-plan.sh")' "$SETTINGS_FILE" > /dev/null 2>&1; then
+    # Add organize-plan.sh Stop hook (Option B)
+    if ! jq -e '.hooks.Stop[].hooks[] | select(.command == "~/.claude/hooks/organize-plan.sh")' "$SETTINGS_FILE" > /dev/null 2>&1; then
+        if jq -e '.hooks.Stop' "$SETTINGS_FILE" > /dev/null 2>&1; then
             jq '.hooks.Stop[0].hooks += [{"type": "command", "command": "~/.claude/hooks/organize-plan.sh"}]' "$SETTINGS_FILE" > "$temp_file"
             mv "$temp_file" "$SETTINGS_FILE"
-            return 0
+            modified=true
+        elif jq -e '.hooks' "$SETTINGS_FILE" > /dev/null 2>&1; then
+            jq '.hooks.Stop = [{"matcher": "*", "hooks": [{"type": "command", "command": "~/.claude/hooks/organize-plan.sh"}]}]' "$SETTINGS_FILE" > "$temp_file"
+            mv "$temp_file" "$SETTINGS_FILE"
+            modified=true
         else
-            # Already present
-            return 1
+            jq '. + {"hooks": {"Stop": [{"matcher": "*", "hooks": [{"type": "command", "command": "~/.claude/hooks/organize-plan.sh"}]}]}}' "$SETTINGS_FILE" > "$temp_file"
+            mv "$temp_file" "$SETTINGS_FILE"
+            modified=true
         fi
-    elif jq -e '.hooks' "$SETTINGS_FILE" > /dev/null 2>&1; then
-        # hooks exists but no Stop, add Stop
-        jq '.hooks.Stop = [{"matcher": "*", "hooks": [{"type": "command", "command": "~/.claude/hooks/organize-plan.sh"}]}]' "$SETTINGS_FILE" > "$temp_file"
-        mv "$temp_file" "$SETTINGS_FILE"
-        return 0
-    else
-        # No hooks at all, add the whole structure
-        jq '. + {"hooks": {"Stop": [{"matcher": "*", "hooks": [{"type": "command", "command": "~/.claude/hooks/organize-plan.sh"}]}]}}' "$SETTINGS_FILE" > "$temp_file"
-        mv "$temp_file" "$SETTINGS_FILE"
-        return 0
     fi
+
+    # Add plans-bank-sync.sh SessionStart hook (Option D)
+    if ! jq -e '.hooks.SessionStart[].hooks[] | select(.command | contains("plans-bank-sync.sh"))' "$SETTINGS_FILE" > /dev/null 2>&1; then
+        if jq -e '.hooks.SessionStart' "$SETTINGS_FILE" > /dev/null 2>&1; then
+            jq '.hooks.SessionStart[0].hooks += [{"type": "command", "command": "~/.claude/hooks/plans-bank-sync.sh session-start"}]' "$SETTINGS_FILE" > "$temp_file"
+            mv "$temp_file" "$SETTINGS_FILE"
+            modified=true
+        elif jq -e '.hooks' "$SETTINGS_FILE" > /dev/null 2>&1; then
+            jq '.hooks.SessionStart = [{"matcher": "*", "hooks": [{"type": "command", "command": "~/.claude/hooks/plans-bank-sync.sh session-start"}]}]' "$SETTINGS_FILE" > "$temp_file"
+            mv "$temp_file" "$SETTINGS_FILE"
+            modified=true
+        fi
+    fi
+
+    # Add plans-bank-sync.sh Stop hook (Option D)
+    if ! jq -e '.hooks.Stop[].hooks[] | select(.command | contains("plans-bank-sync.sh"))' "$SETTINGS_FILE" > /dev/null 2>&1; then
+        if jq -e '.hooks.Stop' "$SETTINGS_FILE" > /dev/null 2>&1; then
+            jq '.hooks.Stop[0].hooks += [{"type": "command", "command": "~/.claude/hooks/plans-bank-sync.sh stop"}]' "$SETTINGS_FILE" > "$temp_file"
+            mv "$temp_file" "$SETTINGS_FILE"
+            modified=true
+        fi
+    fi
+
+    rm -f "$temp_file"
+    [[ "$modified" = true ]]
 }
 
 # Show manual settings.json instructions
@@ -104,20 +120,20 @@ show_manual_settings_instructions() {
     echo ""
     print_warning "Manual configuration required for settings.json"
     echo ""
-    echo "Add this hook configuration to your ~/.claude/settings.json:"
+    echo "Add these hook configurations to your ~/.claude/settings.json:"
     echo ""
     echo '  "hooks": {'
-    echo '    "Stop": ['
-    echo '      {'
-    echo '        "matcher": "*",'
-    echo '        "hooks": ['
-    echo '          {'
-    echo '            "type": "command",'
-    echo '            "command": "~/.claude/hooks/organize-plan.sh"'
-    echo '          }'
-    echo '        ]'
-    echo '      }'
-    echo '    ]'
+    echo '    "SessionStart": [{'
+    echo '      "matcher": "*",'
+    echo '      "hooks": [{"type": "command", "command": "~/.claude/hooks/plans-bank-sync.sh session-start"}]'
+    echo '    }],'
+    echo '    "Stop": [{'
+    echo '      "matcher": "*",'
+    echo '      "hooks": ['
+    echo '        {"type": "command", "command": "~/.claude/hooks/organize-plan.sh"},'
+    echo '        {"type": "command", "command": "~/.claude/hooks/plans-bank-sync.sh stop"}'
+    echo '      ]'
+    echo '    }]'
     echo '  }'
     echo ""
 }
@@ -128,6 +144,17 @@ create_new_settings() {
 {
   "plansDirectory": "./plans",
   "hooks": {
+    "SessionStart": [
+      {
+        "matcher": "*",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "~/.claude/hooks/plans-bank-sync.sh session-start"
+          }
+        ]
+      }
+    ],
     "Stop": [
       {
         "matcher": "*",
@@ -135,6 +162,10 @@ create_new_settings() {
           {
             "type": "command",
             "command": "~/.claude/hooks/organize-plan.sh"
+          },
+          {
+            "type": "command",
+            "command": "~/.claude/hooks/plans-bank-sync.sh stop"
           }
         ]
       }
@@ -157,23 +188,47 @@ install() {
     mkdir -p "$HOOKS_DIR"
     mkdir -p "$SHARED_DIR"
 
-    # Step 2: Download slash command
-    print_step "Installing slash command..."
+    # Step 2: Download slash commands (Option A)
+    print_step "Installing slash commands (Option A)..."
     download_file "$GITHUB_RAW/option-a-slash-command/save-plan.md" "$COMMANDS_DIR/save-plan.md"
+    download_file "$GITHUB_RAW/option-a-slash-command/list-plans.md" "$COMMANDS_DIR/list-plans.md"
+    download_file "$GITHUB_RAW/option-a-slash-command/search-plans.md" "$COMMANDS_DIR/search-plans.md"
+    download_file "$GITHUB_RAW/option-a-slash-command/archive-plan.md" "$COMMANDS_DIR/archive-plan.md"
     print_success "  Installed: $COMMANDS_DIR/save-plan.md"
+    print_success "  Installed: $COMMANDS_DIR/list-plans.md"
+    print_success "  Installed: $COMMANDS_DIR/search-plans.md"
+    print_success "  Installed: $COMMANDS_DIR/archive-plan.md"
 
-    # Step 3: Download hook script
-    print_step "Installing hook script..."
+    # Step 3: Download sync-status command (Option D)
+    print_step "Installing sync-status command (Option D)..."
+    download_file "$GITHUB_RAW/option-d-always-on/commands/sync-status.md" "$COMMANDS_DIR/sync-status.md"
+    print_success "  Installed: $COMMANDS_DIR/sync-status.md"
+
+    # Step 4: Download hook scripts
+    print_step "Installing hook scripts..."
     download_file "$GITHUB_RAW/option-b-automatic/hooks/organize-plan.sh" "$HOOKS_DIR/organize-plan.sh"
     chmod +x "$HOOKS_DIR/organize-plan.sh"
-    print_success "  Installed: $HOOKS_DIR/organize-plan.sh"
+    print_success "  Installed: $HOOKS_DIR/organize-plan.sh (Option B)"
 
-    # Step 4: Download shared utilities
+    download_file "$GITHUB_RAW/option-d-always-on/hooks/plans-bank-sync.sh" "$HOOKS_DIR/plans-bank-sync.sh"
+    chmod +x "$HOOKS_DIR/plans-bank-sync.sh"
+    print_success "  Installed: $HOOKS_DIR/plans-bank-sync.sh (Option D)"
+
+    # Step 5: Download shared utilities
     print_step "Installing shared utilities..."
     download_file "$GITHUB_RAW/shared/plan-utils.sh" "$SHARED_DIR/plan-utils.sh"
     print_success "  Installed: $SHARED_DIR/plan-utils.sh"
 
-    # Step 5: Handle settings.json
+    # Step 6: Install configuration file (Option D)
+    print_step "Installing configuration..."
+    if [[ ! -f "$CONFIG_FILE" ]]; then
+        download_file "$GITHUB_RAW/option-d-always-on/config/plans-bank-config.json" "$CONFIG_FILE"
+        print_success "  Installed: $CONFIG_FILE"
+    else
+        print_warning "  Config already exists: $CONFIG_FILE (keeping existing)"
+    fi
+
+    # Step 7: Handle settings.json
     print_step "Configuring settings.json..."
 
     if [[ ! -f "$SETTINGS_FILE" ]]; then
@@ -185,7 +240,7 @@ install() {
         if merge_settings_with_jq; then
             print_success "  Merged hook configuration into existing settings.json"
         else
-            print_warning "  Hook already configured in settings.json"
+            print_warning "  Hooks already configured in settings.json"
         fi
     else
         # Existing settings without jq
@@ -197,14 +252,26 @@ install() {
     print_success "Installation complete!"
     echo ""
     echo "What's installed:"
-    echo "  - Slash command: /save-plan"
-    echo "  - Automatic hook: Runs on session stop"
+    echo "  - Slash commands: /save-plan, /list-plans, /search-plans, /archive-plan, /sync-status"
+    echo "  - Option B hook: Renames files in ./plans/ on session stop"
+    echo "  - Option D hook: Syncs plans from ~/.claude/plans/ to ./plans/"
     echo "  - Shared utilities: plan-utils.sh"
+    echo "  - Configuration: $CONFIG_FILE"
+    echo ""
+    echo "Features:"
+    echo "  - Auto-sync: Plans automatically copied from ~/.claude/plans/ to ./plans/"
+    echo "  - Auto-categorize: bugfix-, refactor-, docs-, test-, or feature- prefix"
+    echo "  - Auto-archive: Plans older than 30 days moved to ./plans/archive/"
+    echo "  - Auto-commit: Each synced plan committed to git"
     echo ""
     echo "Usage:"
     echo "  /save-plan              # Save current plan with extracted name"
     echo "  /save-plan my-feature   # Save with custom name"
     echo "  /save-plan --commit     # Save and git commit"
+    echo "  /list-plans             # List all plans with metadata"
+    echo "  /search-plans <term>    # Search plan contents"
+    echo "  /archive-plan <file>    # Archive a plan file"
+    echo "  /sync-status            # Check sync status and pending plans"
     echo ""
     echo "To uninstall:"
     echo "  curl -fsSL $GITHUB_RAW/quick-install.sh | bash -s -- --uninstall"
@@ -220,19 +287,27 @@ uninstall() {
 
     local removed=false
 
-    # Remove slash command
-    if [[ -f "$COMMANDS_DIR/save-plan.md" ]]; then
-        print_step "Removing slash command..."
-        rm "$COMMANDS_DIR/save-plan.md"
-        print_success "  Removed: $COMMANDS_DIR/save-plan.md"
+    # Remove slash commands
+    print_step "Removing slash commands..."
+    for cmd in save-plan list-plans search-plans archive-plan sync-status; do
+        if [[ -f "$COMMANDS_DIR/${cmd}.md" ]]; then
+            rm "$COMMANDS_DIR/${cmd}.md"
+            print_success "  Removed: $COMMANDS_DIR/${cmd}.md"
+            removed=true
+        fi
+    done
+
+    # Remove hook scripts
+    print_step "Removing hook scripts..."
+    if [[ -f "$HOOKS_DIR/organize-plan.sh" ]]; then
+        rm "$HOOKS_DIR/organize-plan.sh"
+        print_success "  Removed: $HOOKS_DIR/organize-plan.sh"
         removed=true
     fi
 
-    # Remove hook script
-    if [[ -f "$HOOKS_DIR/organize-plan.sh" ]]; then
-        print_step "Removing hook script..."
-        rm "$HOOKS_DIR/organize-plan.sh"
-        print_success "  Removed: $HOOKS_DIR/organize-plan.sh"
+    if [[ -f "$HOOKS_DIR/plans-bank-sync.sh" ]]; then
+        rm "$HOOKS_DIR/plans-bank-sync.sh"
+        print_success "  Removed: $HOOKS_DIR/plans-bank-sync.sh"
         removed=true
     fi
 
@@ -247,10 +322,18 @@ uninstall() {
         rmdir "$SHARED_DIR" 2>/dev/null || true
     fi
 
+    # Remove config file
+    if [[ -f "$CONFIG_FILE" ]]; then
+        print_step "Removing configuration..."
+        rm "$CONFIG_FILE"
+        print_success "  Removed: $CONFIG_FILE"
+        removed=true
+    fi
+
     if [[ "$removed" = true ]]; then
         echo ""
         print_warning "Note: settings.json was not modified."
-        echo "To fully clean up, remove the Stop hook configuration from ~/.claude/settings.json"
+        echo "To fully clean up, remove the hook configurations from ~/.claude/settings.json"
         echo ""
         print_success "Uninstall complete!"
     else

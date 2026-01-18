@@ -1,0 +1,18 @@
+{
+  "alwaysOn": true,
+  "sourceDirectory": "~/.claude/plans",
+  "targetDirectory": "./plans",
+  "namingPrefix": "feature",
+  "autoCommit": true,
+  "categories": {
+    "bugfix": ["bug", "fix", "issue", "error", "patch"],
+    "refactor": ["refactor", "cleanup", "reorganize", "restructure"],
+    "docs": ["documentation", "readme", "guide", "doc"],
+    "test": ["test", "spec", "coverage"]
+  },
+  "autoArchive": {
+    "enabled": true,
+    "olderThanDays": 30,
+    "archiveDirectory": "./plans/archive"
+  }
+}
