@@ -1,5 +1,5 @@
 #!/bin/bash
-# plans-bank-sync.sh - Auto-rename plans in ./plans/ directory
+# plans-bank-sync.sh - Auto-rename plans in ./docs/plans/ directory
 # Renames files with default names (word-word-word.md) to descriptive format
 #
 # Usage:
@@ -11,22 +11,44 @@
 # Exit silently on any error (hooks should be non-disruptive)
 set -e
 
-# Configuration paths
-CLAUDE_DIR="$HOME/.claude"
-PLANS_BANK_CONFIG="${PLANS_BANK_CONFIG:-$CLAUDE_DIR/plans-bank-config.json}"
+# Configuration paths with cascading fallback
+# Priority order for config:
+# 1) Project-local ./.claude/plans-bank-config.json
+# 2) Global ~/.claude/plans-bank-config.json
+# 3) Environment variable
+CONFIG_LOCATIONS=(
+    "./.claude/plans-bank-config.json"
+    "$HOME/.claude/plans-bank-config.json"
+)
+
+PLANS_BANK_CONFIG=""
+for config_path in "${CONFIG_LOCATIONS[@]}"; do
+    if [[ -f "$config_path" ]]; then
+        PLANS_BANK_CONFIG="$config_path"
+        break
+    fi
+done
+PLANS_BANK_CONFIG="${PLANS_BANK_CONFIG:-${PLANS_BANK_CONFIG_ENV:-}}"
 
 # Default configuration values
-DEFAULT_TARGET_DIR="./plans"
+DEFAULT_TARGET_DIR="./docs/plans"
 DEFAULT_AUTO_COMMIT="true"
 DEFAULT_AUTO_ARCHIVE_ENABLED="true"
 DEFAULT_AUTO_ARCHIVE_DAYS="30"
 
-# Source shared utilities if available
+# Source shared utilities with cascading fallback
+# Priority order:
+# 1) Project-local ./.claude/shared/plan-utils.sh
+# 2) Global ~/.claude/shared/plan-utils.sh
+# 3) Relative to script location
+# 4) Inline fallback functions
+
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 UTILS_LOCATIONS=(
-    "${SCRIPT_DIR}/../../shared/plan-utils.sh"
-    "$CLAUDE_DIR/shared/plan-utils.sh"
+    "./.claude/shared/plan-utils.sh"
+    "$HOME/.claude/shared/plan-utils.sh"
     "${SCRIPT_DIR}/../shared/plan-utils.sh"
+    "${SCRIPT_DIR}/../../shared/plan-utils.sh"
 )
 
 UTILS_LOADED=false
@@ -141,7 +163,7 @@ load_config() {
 
     if [[ -f "$PLANS_BANK_CONFIG" ]] && command -v jq &> /dev/null; then
         ALWAYS_ON=$(jq -r '.alwaysOn // true' "$PLANS_BANK_CONFIG" 2>/dev/null)
-        TARGET_DIR=$(jq -r '.targetDirectory // "./plans"' "$PLANS_BANK_CONFIG" 2>/dev/null)
+        TARGET_DIR=$(jq -r '.targetDirectory // "./docs/plans"' "$PLANS_BANK_CONFIG" 2>/dev/null)
         AUTO_COMMIT=$(jq -r '.autoCommit // true' "$PLANS_BANK_CONFIG" 2>/dev/null)
         AUTO_ARCHIVE_ENABLED=$(jq -r '.autoArchive.enabled // true' "$PLANS_BANK_CONFIG" 2>/dev/null)
         AUTO_ARCHIVE_DAYS=$(jq -r '.autoArchive.olderThanDays // 30' "$PLANS_BANK_CONFIG" 2>/dev/null)
@@ -168,7 +190,7 @@ git_commit_plan() {
     git commit -m "Add plan: ${name}" 2>/dev/null || true
 }
 
-# Main rename logic - operates only on ./plans/
+# Main rename logic - operates only on ./docs/plans/
 rename_plans() {
     local hook_type="${1:-sync}"
     local renamed_count=0
@@ -186,7 +208,7 @@ rename_plans() {
         exit 0
     fi
 
-    # Process each .md file in ./plans/ directory
+    # Process each .md file in ./docs/plans/ directory
     for file in "$TARGET_DIR"/*.md; do
         # Skip if no files match
         [[ -e "$file" ]] || continue
@@ -251,9 +273,10 @@ show_status() {
     echo "  Plans Directory: $TARGET_DIR"
     echo "  Auto-Commit: $AUTO_COMMIT"
     echo "  Auto-Archive: $AUTO_ARCHIVE_ENABLED (after $AUTO_ARCHIVE_DAYS days)"
+    echo "  Config File: ${PLANS_BANK_CONFIG:-"(none found)"}"
     echo ""
 
-    # Count files in ./plans/
+    # Count files in ./docs/plans/
     local default_count=0
     local organized_count=0
     local total=0

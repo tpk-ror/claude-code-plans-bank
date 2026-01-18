@@ -11,14 +11,20 @@ YELLOW='\033[1;33m'
 BLUE='\033[0;34m'
 NC='\033[0m' # No Color
 
-# Directories
+# Script directory
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-CLAUDE_DIR="$HOME/.claude"
-COMMANDS_DIR="$CLAUDE_DIR/commands"
-HOOKS_DIR="$CLAUDE_DIR/hooks"
-SHARED_DIR="$CLAUDE_DIR/shared"
-SETTINGS_FILE="$CLAUDE_DIR/settings.json"
-CONFIG_FILE="$CLAUDE_DIR/plans-bank-config.json"
+
+# Installation mode variables (set by select_install_mode)
+INSTALL_MODE=""  # "global" or "project"
+HOOK_PATH_PREFIX=""  # "~/.claude" or "./.claude"
+
+# Directory variables (set by setup_directories)
+CLAUDE_DIR=""
+COMMANDS_DIR=""
+HOOKS_DIR=""
+SHARED_DIR=""
+SETTINGS_FILE=""
+CONFIG_FILE=""
 
 # Print colored output
 print_header() {
@@ -35,6 +41,59 @@ print_warning() {
 
 print_error() {
     echo -e "${RED}$1${NC}"
+}
+
+# Select installation mode (global or project)
+select_install_mode() {
+    echo ""
+    print_header "Installation Scope"
+    echo "=================="
+    echo ""
+    echo "Where would you like to install Claude Code Plans Bank?"
+    echo ""
+    echo "  1) Global (~/.claude/)"
+    echo "     - Available in all projects"
+    echo "     - Hooks run for all Claude Code sessions"
+    echo ""
+    echo "  2) Project-specific (./.claude/)"
+    echo "     - Only available in this project"
+    echo "     - Uses settings.local.json"
+    echo "     - Hooks only run for this project"
+    echo ""
+    read -p "Enter choice [1-2]: " mode_choice
+
+    case $mode_choice in
+        1)
+            INSTALL_MODE="global"
+            HOOK_PATH_PREFIX="~/.claude"
+            ;;
+        2)
+            INSTALL_MODE="project"
+            HOOK_PATH_PREFIX="./.claude"
+            ;;
+        *)
+            print_error "Invalid choice. Please enter 1 or 2."
+            exit 1
+            ;;
+    esac
+
+    setup_directories
+}
+
+# Setup directories based on installation mode
+setup_directories() {
+    if [[ "$INSTALL_MODE" == "global" ]]; then
+        CLAUDE_DIR="$HOME/.claude"
+        SETTINGS_FILE="$CLAUDE_DIR/settings.json"
+    else
+        CLAUDE_DIR="./.claude"
+        SETTINGS_FILE="$CLAUDE_DIR/settings.local.json"
+    fi
+
+    COMMANDS_DIR="$CLAUDE_DIR/commands"
+    HOOKS_DIR="$CLAUDE_DIR/hooks"
+    SHARED_DIR="$CLAUDE_DIR/shared"
+    CONFIG_FILE="$CLAUDE_DIR/plans-bank-config.json"
 }
 
 # Install slash commands (Option A)
@@ -69,16 +128,16 @@ install_automatic() {
     chmod +x "$HOOKS_DIR/organize-plan.sh"
 
     # Copy shared utilities
-    mkdir -p "$HOOKS_DIR/../shared"
-    cp "$SCRIPT_DIR/shared/plan-utils.sh" "$HOOKS_DIR/../shared/plan-utils.sh"
+    mkdir -p "$SHARED_DIR"
+    cp "$SCRIPT_DIR/shared/plan-utils.sh" "$SHARED_DIR/plan-utils.sh"
 
     print_success "Hook script installed to: $HOOKS_DIR/organize-plan.sh"
 
-    # Handle settings.json
+    # Handle settings file
     if [[ -f "$SETTINGS_FILE" ]]; then
-        print_warning "Found existing settings.json"
+        print_warning "Found existing $(basename "$SETTINGS_FILE")"
         echo ""
-        echo "You need to manually add the hook configuration to your settings.json."
+        echo "You need to manually add the hook configuration to your $(basename "$SETTINGS_FILE")."
         echo "Add this to your hooks section:"
         echo ""
         echo '  "hooks": {'
@@ -88,7 +147,7 @@ install_automatic() {
         echo '        "hooks": ['
         echo '          {'
         echo '            "type": "command",'
-        echo '            "command": "~/.claude/hooks/organize-plan.sh"'
+        echo "            \"command\": \"${HOOK_PATH_PREFIX}/hooks/organize-plan.sh\""
         echo '          }'
         echo '        ]'
         echo '      }'
@@ -97,12 +156,37 @@ install_automatic() {
         echo ""
         read -p "Would you like to view the full settings snippet? [y/N] " show_snippet
         if [[ "$show_snippet" =~ ^[Yy]$ ]]; then
-            cat "$SCRIPT_DIR/option-b-automatic/settings.json"
+            if [[ "$INSTALL_MODE" == "project" ]]; then
+                cat "$SCRIPT_DIR/option-b-automatic/settings.local.json"
+            else
+                cat "$SCRIPT_DIR/option-b-automatic/settings.json"
+            fi
         fi
     else
-        # No existing settings, safe to copy
+        # No existing settings, safe to create
         mkdir -p "$CLAUDE_DIR"
-        cp "$SCRIPT_DIR/option-b-automatic/settings.json" "$SETTINGS_FILE"
+        if [[ "$INSTALL_MODE" == "project" ]]; then
+            cat > "$SETTINGS_FILE" << EOF
+{
+  "plansDirectory": "./docs/plans",
+  "hooks": {
+    "Stop": [
+      {
+        "matcher": "*",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "./.claude/hooks/organize-plan.sh"
+          }
+        ]
+      }
+    ]
+  }
+}
+EOF
+        else
+            cp "$SCRIPT_DIR/option-b-automatic/settings.json" "$SETTINGS_FILE"
+        fi
         print_success "Settings file created at: $SETTINGS_FILE"
     fi
 }
@@ -112,15 +196,16 @@ has_jq() {
     command -v jq &> /dev/null
 }
 
-# Merge hook configuration into existing settings.json using jq
+# Merge hook configuration into existing settings file using jq
 merge_settings_with_jq() {
     local temp_file=$(mktemp)
+    local hook_command="${HOOK_PATH_PREFIX}/hooks/organize-plan.sh"
 
     # Check if hooks.Stop exists and merge appropriately
     if jq -e '.hooks.Stop' "$SETTINGS_FILE" > /dev/null 2>&1; then
         # Stop hook exists, add our hook to it if not already present
-        if ! jq -e '.hooks.Stop[].hooks[] | select(.command == "~/.claude/hooks/organize-plan.sh")' "$SETTINGS_FILE" > /dev/null 2>&1; then
-            jq '.hooks.Stop[0].hooks += [{"type": "command", "command": "~/.claude/hooks/organize-plan.sh"}]' "$SETTINGS_FILE" > "$temp_file"
+        if ! jq -e ".hooks.Stop[].hooks[] | select(.command == \"$hook_command\")" "$SETTINGS_FILE" > /dev/null 2>&1; then
+            jq ".hooks.Stop[0].hooks += [{\"type\": \"command\", \"command\": \"$hook_command\"}]" "$SETTINGS_FILE" > "$temp_file"
             mv "$temp_file" "$SETTINGS_FILE"
             return 0
         else
@@ -130,12 +215,12 @@ merge_settings_with_jq() {
         fi
     elif jq -e '.hooks' "$SETTINGS_FILE" > /dev/null 2>&1; then
         # hooks exists but no Stop, add Stop
-        jq '.hooks.Stop = [{"matcher": "*", "hooks": [{"type": "command", "command": "~/.claude/hooks/organize-plan.sh"}]}]' "$SETTINGS_FILE" > "$temp_file"
+        jq ".hooks.Stop = [{\"matcher\": \"*\", \"hooks\": [{\"type\": \"command\", \"command\": \"$hook_command\"}]}]" "$SETTINGS_FILE" > "$temp_file"
         mv "$temp_file" "$SETTINGS_FILE"
         return 0
     else
         # No hooks at all, add the whole structure
-        jq '. + {"hooks": {"Stop": [{"matcher": "*", "hooks": [{"type": "command", "command": "~/.claude/hooks/organize-plan.sh"}]}]}}' "$SETTINGS_FILE" > "$temp_file"
+        jq ". + {\"hooks\": {\"Stop\": [{\"matcher\": \"*\", \"hooks\": [{\"type\": \"command\", \"command\": \"$hook_command\"}]}]}}" "$SETTINGS_FILE" > "$temp_file"
         mv "$temp_file" "$SETTINGS_FILE"
         return 0
     fi
@@ -169,30 +254,51 @@ install_plugin() {
 
     # Install shared utilities
     print_header "Step 3: Installing shared utilities..."
-    mkdir -p "$CLAUDE_DIR/shared"
-    cp "$SCRIPT_DIR/shared/plan-utils.sh" "$CLAUDE_DIR/shared/plan-utils.sh"
-    print_success "  Installed: $CLAUDE_DIR/shared/plan-utils.sh"
+    mkdir -p "$SHARED_DIR"
+    cp "$SCRIPT_DIR/shared/plan-utils.sh" "$SHARED_DIR/plan-utils.sh"
+    print_success "  Installed: $SHARED_DIR/plan-utils.sh"
     echo ""
 
-    # Handle settings.json with auto-merge
-    print_header "Step 4: Configuring settings.json..."
+    # Handle settings file with auto-merge
+    print_header "Step 4: Configuring $(basename "$SETTINGS_FILE")..."
     if [[ ! -f "$SETTINGS_FILE" ]]; then
         # No existing settings, create new
         mkdir -p "$CLAUDE_DIR"
-        cp "$SCRIPT_DIR/option-b-automatic/settings.json" "$SETTINGS_FILE"
+        if [[ "$INSTALL_MODE" == "project" ]]; then
+            cat > "$SETTINGS_FILE" << EOF
+{
+  "plansDirectory": "./docs/plans",
+  "hooks": {
+    "Stop": [
+      {
+        "matcher": "*",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "./.claude/hooks/organize-plan.sh"
+          }
+        ]
+      }
+    ]
+  }
+}
+EOF
+        else
+            cp "$SCRIPT_DIR/option-b-automatic/settings.json" "$SETTINGS_FILE"
+        fi
         print_success "  Created: $SETTINGS_FILE"
     elif has_jq; then
         # Existing settings with jq available - try to merge
         if merge_settings_with_jq; then
-            print_success "  Merged hook configuration into existing settings.json"
+            print_success "  Merged hook configuration into existing $(basename "$SETTINGS_FILE")"
         else
-            print_warning "  Hook already configured in settings.json"
+            print_warning "  Hook already configured in $(basename "$SETTINGS_FILE")"
         fi
     else
         # Existing settings without jq
-        print_warning "  Existing settings.json found, but jq not available for auto-merge"
+        print_warning "  Existing $(basename "$SETTINGS_FILE") found, but jq not available for auto-merge"
         echo ""
-        echo "Add this hook configuration to your ~/.claude/settings.json:"
+        echo "Add this hook configuration to your $SETTINGS_FILE:"
         echo ""
         echo '  "hooks": {'
         echo '    "Stop": ['
@@ -201,7 +307,7 @@ install_plugin() {
         echo '        "hooks": ['
         echo '          {'
         echo '            "type": "command",'
-        echo '            "command": "~/.claude/hooks/organize-plan.sh"'
+        echo "            \"command\": \"${HOOK_PATH_PREFIX}/hooks/organize-plan.sh\""
         echo '          }'
         echo '        ]'
         echo '      }'
@@ -212,15 +318,16 @@ install_plugin() {
     fi
 }
 
-# Merge always-on hook configuration into existing settings.json using jq
+# Merge always-on hook configuration into existing settings file using jq
 configure_always_on_hooks() {
     local temp_file=$(mktemp)
+    local hook_command="${HOOK_PATH_PREFIX}/hooks/plans-bank-sync.sh stop"
 
     # Define our hook
-    local stop_hook='{"type": "command", "command": "~/.claude/hooks/plans-bank-sync.sh stop"}'
+    local stop_hook="{\"type\": \"command\", \"command\": \"$hook_command\"}"
 
     # Check if we need to add Stop hook
-    if ! jq -e '.hooks.Stop[].hooks[] | select(.command | contains("plans-bank-sync.sh"))' "$SETTINGS_FILE" > /dev/null 2>&1; then
+    if ! jq -e ".hooks.Stop[].hooks[] | select(.command | contains(\"plans-bank-sync.sh\"))" "$SETTINGS_FILE" > /dev/null 2>&1; then
         if jq -e '.hooks.Stop' "$SETTINGS_FILE" > /dev/null 2>&1; then
             # Stop exists, add our hook
             jq ".hooks.Stop[0].hooks += [$stop_hook]" "$SETTINGS_FILE" > "$temp_file"
@@ -276,26 +383,47 @@ install_always_on() {
     fi
     echo ""
 
-    # Handle settings.json
-    print_header "Step 5: Configuring settings.json..."
+    # Handle settings file
+    print_header "Step 5: Configuring $(basename "$SETTINGS_FILE")..."
     if [[ ! -f "$SETTINGS_FILE" ]]; then
-        # No existing settings, copy our template
-        cp "$SCRIPT_DIR/option-d-always-on/settings.json" "$SETTINGS_FILE"
+        # No existing settings, create from template
+        if [[ "$INSTALL_MODE" == "project" ]]; then
+            cat > "$SETTINGS_FILE" << EOF
+{
+  "plansDirectory": "./docs/plans",
+  "hooks": {
+    "Stop": [
+      {
+        "matcher": "*",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "./.claude/hooks/plans-bank-sync.sh stop"
+          }
+        ]
+      }
+    ]
+  }
+}
+EOF
+        else
+            cp "$SCRIPT_DIR/option-d-always-on/settings.json" "$SETTINGS_FILE"
+        fi
         print_success "  Created: $SETTINGS_FILE"
     elif has_jq; then
         # Existing settings with jq available - merge
         configure_always_on_hooks
-        print_success "  Merged hook configuration into existing settings.json"
+        print_success "  Merged hook configuration into existing $(basename "$SETTINGS_FILE")"
     else
         # Existing settings without jq
-        print_warning "  Existing settings.json found, but jq not available for auto-merge"
+        print_warning "  Existing $(basename "$SETTINGS_FILE") found, but jq not available for auto-merge"
         echo ""
-        echo "Add this hook to your ~/.claude/settings.json:"
+        echo "Add this hook to your $SETTINGS_FILE:"
         echo ""
         echo '  "hooks": {'
         echo '    "Stop": [{'
         echo '      "matcher": "*",'
-        echo '      "hooks": [{"type": "command", "command": "~/.claude/hooks/plans-bank-sync.sh stop"}]'
+        echo "      \"hooks\": [{\"type\": \"command\", \"command\": \"${HOOK_PATH_PREFIX}/hooks/plans-bank-sync.sh stop\"}]"
         echo '    }]'
         echo '  }'
         echo ""
@@ -306,7 +434,7 @@ install_always_on() {
     print_success "Always-On Auto-Save installed!"
     echo ""
     echo "What happens now:"
-    echo "  - Plans in ./plans/ with default names (word-word-word.md) are auto-renamed"
+    echo "  - Plans in ./docs/plans/ with default names (word-word-word.md) are auto-renamed"
     echo "  - Stop hook: Renames plans when Claude Code stops"
     echo "  - Use /sync-status to check status"
     echo ""
@@ -332,7 +460,51 @@ install_everything() {
 
 # Uninstall everything
 uninstall() {
-    print_header "Uninstalling claude-code-plans-bank..."
+    echo ""
+    print_header "Uninstall Scope"
+    echo "==============="
+    echo ""
+    echo "Which installation would you like to remove?"
+    echo ""
+    echo "  1) Global (~/.claude/)"
+    echo "  2) Project-specific (./.claude/)"
+    echo "  3) Both"
+    echo "  4) Cancel"
+    echo ""
+    read -p "Enter choice [1-4]: " uninstall_choice
+
+    case $uninstall_choice in
+        1)
+            INSTALL_MODE="global"
+            setup_directories
+            do_uninstall
+            ;;
+        2)
+            INSTALL_MODE="project"
+            setup_directories
+            do_uninstall
+            ;;
+        3)
+            INSTALL_MODE="global"
+            setup_directories
+            do_uninstall
+            INSTALL_MODE="project"
+            setup_directories
+            do_uninstall
+            ;;
+        4)
+            echo "Cancelled."
+            exit 0
+            ;;
+        *)
+            print_error "Invalid choice."
+            exit 1
+            ;;
+    esac
+}
+
+do_uninstall() {
+    print_header "Uninstalling from $CLAUDE_DIR..."
 
     local removed=false
 
@@ -380,20 +552,26 @@ uninstall() {
     fi
 
     if [[ "$removed" = false ]]; then
-        echo "Nothing to uninstall."
+        echo "Nothing to uninstall in $CLAUDE_DIR."
     else
-        print_warning "Note: settings.json was not modified. Remove the hook configuration manually if needed."
+        print_warning "Note: $(basename "$SETTINGS_FILE") was not modified. Remove the hook configuration manually if needed."
     fi
+    echo ""
 }
 
 # Main menu
 main() {
+    # First, select installation mode
+    select_install_mode
+
     echo ""
     print_header "Claude Code Plans Bank - Installer"
     echo "=================================="
     echo ""
+    echo "Installation mode: $INSTALL_MODE ($CLAUDE_DIR)"
+    echo ""
     echo "Organize your Claude Code plan files with descriptive naming."
-    echo "Format: {category}-{name}-{MM.DD.YY}.md"
+    echo "Format: {category}-{name}-{MM.DD.YY}-{HHMM}.md"
     echo ""
     echo "Choose an installation option:"
     echo ""
@@ -403,14 +581,14 @@ main() {
     echo ""
     echo "  2) Automatic Hook (Option B)"
     echo "     - Renames files automatically on session stop"
-    echo "     - Works with files already in ./plans/"
+    echo "     - Works with files already in ./docs/plans/"
     echo ""
     echo "  3) Quick Plugin (Option C)"
     echo "     - Installs slash command + automatic hook"
-    echo "     - Auto-merges settings.json if jq is available"
+    echo "     - Auto-merges $(basename "$SETTINGS_FILE") if jq is available"
     echo ""
     echo -e "  ${GREEN}4) Always-On Auto-Save (Option D) - RECOMMENDED${NC}"
-    echo "     - Auto-renames plans in ./plans/ from default names"
+    echo "     - Auto-renames plans in ./docs/plans/ from default names"
     echo "     - Hook runs on session Stop"
     echo "     - Auto-categorizes: bugfix, refactor, docs, test, feature"
     echo "     - Includes /sync-status command"
@@ -459,11 +637,15 @@ main() {
     echo ""
     echo "Next steps:"
     echo "  1. Create a plan in Claude Code (use plan mode)"
-    echo "  2. Plans are saved to ./plans/ with default names"
+    echo "  2. Plans are saved to ./docs/plans/ with default names"
     echo "  3. Run /save-plan to rename manually (Options A/C)"
     echo "     OR let it auto-rename on session stop (Options B/D)"
-    echo "  4. Find your plans in ./plans/ with descriptive names"
+    echo "  4. Find your plans in ./docs/plans/ with descriptive names"
     echo "  5. Use /sync-status to check status"
+    if [[ "$INSTALL_MODE" == "project" ]]; then
+        echo ""
+        print_warning "Note: Project .claude/ directory may need to be added to .gitignore"
+    fi
     echo ""
 }
 

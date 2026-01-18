@@ -4,7 +4,7 @@ allowed-tools: Bash, Read
 argument-hint: [filename] [--older-than Nd] [--all-default] [--list]
 ---
 
-Archive plan files by moving them to the `./plans/archive/` subdirectory.
+Archive plan files by moving them to the `./docs/plans/archive/` subdirectory.
 
 ## Instructions
 
@@ -23,13 +23,13 @@ Supported arguments:
 If `--list` flag is provided, show archived plans:
 
 ```bash
-ARCHIVE_DIR="./plans/archive"
+ARCHIVE_DIR="./docs/plans/archive"
 
 echo "Archived Plans:"
 echo ""
 
 if [[ -d "$ARCHIVE_DIR" ]]; then
-    echo "Project Archive (./plans/archive/):"
+    echo "Project Archive (./docs/plans/archive/):"
     ls -la "$ARCHIVE_DIR"/*.md 2>/dev/null || echo "  (empty)"
 else
     echo "  (no archive directory)"
@@ -40,19 +40,19 @@ fi
 
 If a filename is provided (not a flag):
 
-1. Search for the file in `./plans/`:
-   - `./plans/<filename>`
+1. Search for the file in `./docs/plans/`:
+   - `./docs/plans/<filename>`
 
 2. If not found, report error
 
 3. Create archive directory if needed:
 ```bash
-mkdir -p ./plans/archive
+mkdir -p ./docs/plans/archive
 ```
 
 4. Move the file:
 ```bash
-mv "./plans/$filename" "./plans/archive/$filename"
+mv "./docs/plans/$filename" "./docs/plans/archive/$filename"
 ```
 
 ### Step 4: Archive by age (--older-than)
@@ -69,7 +69,7 @@ now=$(date +%s)
 threshold=$((N * 86400))
 
 # For each .md file in plans directory
-for file in ./plans/*.md; do
+for file in ./docs/plans/*.md; do
     file_time=$(stat -c %Y "$file" 2>/dev/null || stat -f %m "$file" 2>/dev/null)
     age=$((now - file_time))
     if [[ $age -gt $threshold ]]; then
@@ -87,7 +87,7 @@ If `--all-default` flag is provided:
 1. Find all plans matching the default naming pattern (word-word-word.md):
 ```bash
 # Pattern: adjective-noun-animal.md (all lowercase, three words)
-for file in ./plans/*.md; do
+for file in ./docs/plans/*.md; do
     filename=$(basename "$file")
     if [[ "$filename" =~ ^[a-z]+-[a-z]+-[a-z]+\.md$ ]]; then
         # This is a default-named plan
@@ -105,7 +105,7 @@ For each file to archive:
 archive_file() {
     local file="$1"
     local filename=$(basename "$file")
-    local archive_dir="./plans/archive"
+    local archive_dir="./docs/plans/archive"
 
     mkdir -p "$archive_dir"
     mv "$file" "${archive_dir}/${filename}"
@@ -147,16 +147,16 @@ Archived 3 plans:
 
 ## Archive Location
 
-Plans are archived to a subdirectory within `./plans/`:
-- `./plans/file.md` -> `./plans/archive/file.md`
+Plans are archived to a subdirectory within `./docs/plans/`:
+- `./docs/plans/file.md` -> `./docs/plans/archive/file.md`
 
 ## Expected Output
 
 **Archiving a specific file:**
 ```
 Archived: feature-old-design-01.05.26.md
-  From: ./plans/feature-old-design-01.05.26.md
-  To:   ./plans/archive/feature-old-design-01.05.26.md
+  From: ./docs/plans/feature-old-design-01.05.26.md
+  To:   ./docs/plans/archive/feature-old-design-01.05.26.md
 ```
 
 **Archiving by age:**
@@ -168,14 +168,14 @@ Found 5 plans older than 30 days:
   4. sleepy-shimmying-moler.md (42 days old)
   5. fuzzy-dancing-penguin.md (38 days old)
 
-Archived 5 plans to ./plans/archive/
+Archived 5 plans to ./docs/plans/archive/
 ```
 
 **Listing archives:**
 ```
 Archived Plans:
 
-Project Archive (./plans/archive/):
+Project Archive (./docs/plans/archive/):
   1. groovy-gathering-chipmunk.md (1.4K, archived 2 days ago)
   2. sleepy-shimmying-moler.md (2.1K, archived 1 week ago)
   3. feature-old-api-12.15.25.md (3.2K, archived today)
@@ -188,7 +188,7 @@ Total: 3 archived plans
 If file not found:
 ```
 Error: Plan file not found: nonexistent-file.md
-Searched in: ./plans/
+Searched in: ./docs/plans/
 ```
 
 If no plans match criteria:

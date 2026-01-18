@@ -1,7 +1,16 @@
 #!/bin/bash
 # quick-install.sh - One-liner installer for claude-code-plans-bank
 # Usage: curl -fsSL https://raw.githubusercontent.com/tpk-ror/claude-code-plans-bank/main/quick-install.sh | bash
-# Uninstall: curl -fsSL ... | bash -s -- --uninstall
+#
+# Options:
+#   --global, -g    Install globally (~/.claude/)
+#   --project, -p   Install to current project (./.claude/)
+#   --uninstall, -u Remove installed components
+#   --help, -h      Show help message
+#
+# Non-interactive examples:
+#   curl -fsSL <url>/quick-install.sh | bash -s -- --global
+#   curl -fsSL <url>/quick-install.sh | bash -s -- --project
 
 set -e
 
@@ -15,13 +24,17 @@ NC='\033[0m' # No Color
 # GitHub raw content base URL
 GITHUB_RAW="https://raw.githubusercontent.com/tpk-ror/claude-code-plans-bank/main"
 
-# Directories
-CLAUDE_DIR="$HOME/.claude"
-COMMANDS_DIR="$CLAUDE_DIR/commands"
-HOOKS_DIR="$CLAUDE_DIR/hooks"
-SHARED_DIR="$CLAUDE_DIR/shared"
-SETTINGS_FILE="$CLAUDE_DIR/settings.json"
-CONFIG_FILE="$CLAUDE_DIR/plans-bank-config.json"
+# Installation mode variables
+INSTALL_MODE=""  # "global" or "project"
+HOOK_PATH_PREFIX=""  # "~/.claude" or "./.claude"
+
+# Directory variables (set by setup_directories)
+CLAUDE_DIR=""
+COMMANDS_DIR=""
+HOOKS_DIR=""
+SHARED_DIR=""
+SETTINGS_FILE=""
+CONFIG_FILE=""
 
 # Print functions
 print_header() {
@@ -42,6 +55,59 @@ print_error() {
 
 print_step() {
     echo -e "${BLUE}[*]${NC} $1"
+}
+
+# Setup directories based on installation mode
+setup_directories() {
+    if [[ "$INSTALL_MODE" == "global" ]]; then
+        CLAUDE_DIR="$HOME/.claude"
+        SETTINGS_FILE="$CLAUDE_DIR/settings.json"
+        HOOK_PATH_PREFIX="~/.claude"
+    else
+        CLAUDE_DIR="./.claude"
+        SETTINGS_FILE="$CLAUDE_DIR/settings.local.json"
+        HOOK_PATH_PREFIX="./.claude"
+    fi
+
+    COMMANDS_DIR="$CLAUDE_DIR/commands"
+    HOOKS_DIR="$CLAUDE_DIR/hooks"
+    SHARED_DIR="$CLAUDE_DIR/shared"
+    CONFIG_FILE="$CLAUDE_DIR/plans-bank-config.json"
+}
+
+# Interactive mode selection
+select_install_mode() {
+    echo ""
+    print_header "Installation Scope"
+    echo "=================="
+    echo ""
+    echo "Where would you like to install Claude Code Plans Bank?"
+    echo ""
+    echo "  1) Global (~/.claude/)"
+    echo "     - Available in all projects"
+    echo "     - Hooks run for all Claude Code sessions"
+    echo ""
+    echo "  2) Project-specific (./.claude/)"
+    echo "     - Only available in this project"
+    echo "     - Uses settings.local.json"
+    echo "     - Hooks only run for this project"
+    echo ""
+    read -p "Enter choice [1-2]: " mode_choice
+
+    case $mode_choice in
+        1)
+            INSTALL_MODE="global"
+            ;;
+        2)
+            INSTALL_MODE="project"
+            ;;
+        *)
+            print_error "Invalid choice. Please enter 1 or 2."
+            exit 1
+            ;;
+    esac
+
+    setup_directories
 }
 
 # Check if jq is available
@@ -67,23 +133,25 @@ download_file() {
     fi
 }
 
-# Merge hook configuration into existing settings.json using jq
+# Merge hook configuration into existing settings file using jq
 merge_settings_with_jq() {
     local temp_file=$(mktemp)
     local modified=false
+    local organize_hook="${HOOK_PATH_PREFIX}/hooks/organize-plan.sh"
+    local sync_hook="${HOOK_PATH_PREFIX}/hooks/plans-bank-sync.sh stop"
 
     # Add organize-plan.sh Stop hook (Option B)
-    if ! jq -e '.hooks.Stop[].hooks[] | select(.command == "~/.claude/hooks/organize-plan.sh")' "$SETTINGS_FILE" > /dev/null 2>&1; then
+    if ! jq -e ".hooks.Stop[].hooks[] | select(.command == \"$organize_hook\")" "$SETTINGS_FILE" > /dev/null 2>&1; then
         if jq -e '.hooks.Stop' "$SETTINGS_FILE" > /dev/null 2>&1; then
-            jq '.hooks.Stop[0].hooks += [{"type": "command", "command": "~/.claude/hooks/organize-plan.sh"}]' "$SETTINGS_FILE" > "$temp_file"
+            jq ".hooks.Stop[0].hooks += [{\"type\": \"command\", \"command\": \"$organize_hook\"}]" "$SETTINGS_FILE" > "$temp_file"
             mv "$temp_file" "$SETTINGS_FILE"
             modified=true
         elif jq -e '.hooks' "$SETTINGS_FILE" > /dev/null 2>&1; then
-            jq '.hooks.Stop = [{"matcher": "*", "hooks": [{"type": "command", "command": "~/.claude/hooks/organize-plan.sh"}]}]' "$SETTINGS_FILE" > "$temp_file"
+            jq ".hooks.Stop = [{\"matcher\": \"*\", \"hooks\": [{\"type\": \"command\", \"command\": \"$organize_hook\"}]}]" "$SETTINGS_FILE" > "$temp_file"
             mv "$temp_file" "$SETTINGS_FILE"
             modified=true
         else
-            jq '. + {"hooks": {"Stop": [{"matcher": "*", "hooks": [{"type": "command", "command": "~/.claude/hooks/organize-plan.sh"}]}]}}' "$SETTINGS_FILE" > "$temp_file"
+            jq ". + {\"hooks\": {\"Stop\": [{\"matcher\": \"*\", \"hooks\": [{\"type\": \"command\", \"command\": \"$organize_hook\"}]}]}}" "$SETTINGS_FILE" > "$temp_file"
             mv "$temp_file" "$SETTINGS_FILE"
             modified=true
         fi
@@ -92,7 +160,7 @@ merge_settings_with_jq() {
     # Add plans-bank-sync.sh Stop hook (Option D)
     if ! jq -e '.hooks.Stop[].hooks[] | select(.command | contains("plans-bank-sync.sh"))' "$SETTINGS_FILE" > /dev/null 2>&1; then
         if jq -e '.hooks.Stop' "$SETTINGS_FILE" > /dev/null 2>&1; then
-            jq '.hooks.Stop[0].hooks += [{"type": "command", "command": "~/.claude/hooks/plans-bank-sync.sh stop"}]' "$SETTINGS_FILE" > "$temp_file"
+            jq ".hooks.Stop[0].hooks += [{\"type\": \"command\", \"command\": \"$sync_hook\"}]" "$SETTINGS_FILE" > "$temp_file"
             mv "$temp_file" "$SETTINGS_FILE"
             modified=true
         fi
@@ -102,30 +170,30 @@ merge_settings_with_jq() {
     [[ "$modified" = true ]]
 }
 
-# Show manual settings.json instructions
+# Show manual settings instructions
 show_manual_settings_instructions() {
     echo ""
-    print_warning "Manual configuration required for settings.json"
+    print_warning "Manual configuration required for $(basename "$SETTINGS_FILE")"
     echo ""
-    echo "Add these hook configurations to your ~/.claude/settings.json:"
+    echo "Add these hook configurations to your $SETTINGS_FILE:"
     echo ""
     echo '  "hooks": {'
     echo '    "Stop": [{'
     echo '      "matcher": "*",'
     echo '      "hooks": ['
-    echo '        {"type": "command", "command": "~/.claude/hooks/organize-plan.sh"},'
-    echo '        {"type": "command", "command": "~/.claude/hooks/plans-bank-sync.sh stop"}'
+    echo "        {\"type\": \"command\", \"command\": \"${HOOK_PATH_PREFIX}/hooks/organize-plan.sh\"},"
+    echo "        {\"type\": \"command\", \"command\": \"${HOOK_PATH_PREFIX}/hooks/plans-bank-sync.sh stop\"}"
     echo '      ]'
     echo '    }]'
     echo '  }'
     echo ""
 }
 
-# Create new settings.json
+# Create new settings file
 create_new_settings() {
-    cat > "$SETTINGS_FILE" << 'EOF'
+    cat > "$SETTINGS_FILE" << EOF
 {
-  "plansDirectory": "./plans",
+  "plansDirectory": "./docs/plans",
   "hooks": {
     "Stop": [
       {
@@ -133,11 +201,11 @@ create_new_settings() {
         "hooks": [
           {
             "type": "command",
-            "command": "~/.claude/hooks/organize-plan.sh"
+            "command": "${HOOK_PATH_PREFIX}/hooks/organize-plan.sh"
           },
           {
             "type": "command",
-            "command": "~/.claude/hooks/plans-bank-sync.sh stop"
+            "command": "${HOOK_PATH_PREFIX}/hooks/plans-bank-sync.sh stop"
           }
         ]
       }
@@ -152,6 +220,8 @@ install() {
     echo ""
     print_header "Claude Code Plans Bank - Quick Install"
     echo "========================================"
+    echo ""
+    echo "Installation mode: $INSTALL_MODE ($CLAUDE_DIR)"
     echo ""
 
     # Step 1: Create directories
@@ -200,8 +270,8 @@ install() {
         print_warning "  Config already exists: $CONFIG_FILE (keeping existing)"
     fi
 
-    # Step 7: Handle settings.json
-    print_step "Configuring settings.json..."
+    # Step 7: Handle settings file
+    print_step "Configuring $(basename "$SETTINGS_FILE")..."
 
     if [[ ! -f "$SETTINGS_FILE" ]]; then
         # No existing settings, create new
@@ -210,13 +280,13 @@ install() {
     elif has_jq; then
         # Existing settings with jq available - try to merge
         if merge_settings_with_jq; then
-            print_success "  Merged hook configuration into existing settings.json"
+            print_success "  Merged hook configuration into existing $(basename "$SETTINGS_FILE")"
         else
-            print_warning "  Hooks already configured in settings.json"
+            print_warning "  Hooks already configured in $(basename "$SETTINGS_FILE")"
         fi
     else
         # Existing settings without jq
-        print_warning "  Existing settings.json found, but jq not available for auto-merge"
+        print_warning "  Existing $(basename "$SETTINGS_FILE") found, but jq not available for auto-merge"
         show_manual_settings_instructions
     fi
 
@@ -225,15 +295,15 @@ install() {
     echo ""
     echo "What's installed:"
     echo "  - Slash commands: /save-plan, /list-plans, /search-plans, /archive-plan, /sync-status"
-    echo "  - Option B hook: Renames files in ./plans/ on session stop"
-    echo "  - Option D hook: Auto-renames plans with default names in ./plans/"
+    echo "  - Option B hook: Renames files in ./docs/plans/ on session stop"
+    echo "  - Option D hook: Auto-renames plans with default names in ./docs/plans/"
     echo "  - Shared utilities: plan-utils.sh"
     echo "  - Configuration: $CONFIG_FILE"
     echo ""
     echo "Features:"
     echo "  - Auto-rename: Plans with default names (word-word-word.md) get descriptive names"
     echo "  - Auto-categorize: bugfix-, refactor-, docs-, test-, or feature- prefix"
-    echo "  - Auto-archive: Plans older than 30 days moved to ./plans/archive/"
+    echo "  - Auto-archive: Plans older than 30 days moved to ./docs/plans/archive/"
     echo "  - Auto-commit: Each renamed plan committed to git"
     echo ""
     echo "Usage:"
@@ -244,6 +314,10 @@ install() {
     echo "  /search-plans <term>    # Search plan contents"
     echo "  /archive-plan <file>    # Archive a plan file"
     echo "  /sync-status            # Check sync status and pending plans"
+    if [[ "$INSTALL_MODE" == "project" ]]; then
+        echo ""
+        print_warning "Note: Project .claude/ directory may need to be added to .gitignore"
+    fi
     echo ""
     echo "To uninstall:"
     echo "  curl -fsSL $GITHUB_RAW/quick-install.sh | bash -s -- --uninstall"
@@ -252,9 +326,60 @@ install() {
 
 # Uninstall everything
 uninstall() {
+    # If mode not set, ask which to uninstall
+    if [[ -z "$INSTALL_MODE" ]]; then
+        echo ""
+        print_header "Uninstall Scope"
+        echo "==============="
+        echo ""
+        echo "Which installation would you like to remove?"
+        echo ""
+        echo "  1) Global (~/.claude/)"
+        echo "  2) Project-specific (./.claude/)"
+        echo "  3) Both"
+        echo "  4) Cancel"
+        echo ""
+        read -p "Enter choice [1-4]: " uninstall_choice
+
+        case $uninstall_choice in
+            1)
+                INSTALL_MODE="global"
+                setup_directories
+                do_uninstall
+                ;;
+            2)
+                INSTALL_MODE="project"
+                setup_directories
+                do_uninstall
+                ;;
+            3)
+                INSTALL_MODE="global"
+                setup_directories
+                do_uninstall
+                INSTALL_MODE="project"
+                setup_directories
+                do_uninstall
+                ;;
+            4)
+                echo "Cancelled."
+                exit 0
+                ;;
+            *)
+                print_error "Invalid choice."
+                exit 1
+                ;;
+        esac
+    else
+        setup_directories
+        do_uninstall
+    fi
+}
+
+do_uninstall() {
     echo ""
     print_header "Claude Code Plans Bank - Uninstall"
     echo "===================================="
+    echo "Uninstalling from: $CLAUDE_DIR"
     echo ""
 
     local removed=false
@@ -304,35 +429,83 @@ uninstall() {
 
     if [[ "$removed" = true ]]; then
         echo ""
-        print_warning "Note: settings.json was not modified."
-        echo "To fully clean up, remove the hook configurations from ~/.claude/settings.json"
+        print_warning "Note: $(basename "$SETTINGS_FILE") was not modified."
+        echo "To fully clean up, remove the hook configurations from $SETTINGS_FILE"
         echo ""
         print_success "Uninstall complete!"
     else
-        echo "Nothing to uninstall."
+        echo "Nothing to uninstall in $CLAUDE_DIR."
     fi
     echo ""
 }
 
+# Show help
+show_help() {
+    echo "Claude Code Plans Bank - Quick Install"
+    echo ""
+    echo "Usage:"
+    echo "  curl -fsSL <url>/quick-install.sh | bash              # Interactive install"
+    echo "  curl -fsSL <url>/quick-install.sh | bash -s -- --global   # Global install"
+    echo "  curl -fsSL <url>/quick-install.sh | bash -s -- --project  # Project install"
+    echo "  curl -fsSL <url>/quick-install.sh | bash -s -- --uninstall  # Uninstall"
+    echo ""
+    echo "Options:"
+    echo "  --global, -g      Install globally to ~/.claude/"
+    echo "                    Available in all projects, hooks run for all sessions"
+    echo ""
+    echo "  --project, -p     Install to current project ./.claude/"
+    echo "                    Only available in this project, uses settings.local.json"
+    echo ""
+    echo "  --uninstall, -u   Remove installed components"
+    echo ""
+    echo "  --help, -h        Show this help message"
+    echo ""
+    echo "If no flag is provided, you will be prompted to choose installation scope."
+}
+
 # Main
 main() {
-    case "${1:-}" in
-        --uninstall|-u)
-            uninstall
-            ;;
-        --help|-h)
-            echo "Claude Code Plans Bank - Quick Install"
-            echo ""
-            echo "Usage:"
-            echo "  curl -fsSL <url>/quick-install.sh | bash           # Install"
-            echo "  curl -fsSL <url>/quick-install.sh | bash -s -- --uninstall  # Uninstall"
-            echo ""
-            echo "Options:"
-            echo "  --uninstall, -u   Remove installed components"
-            echo "  --help, -h        Show this help message"
-            ;;
-        *)
+    local action="install"
+
+    # Parse arguments
+    while [[ $# -gt 0 ]]; do
+        case "$1" in
+            --global|-g)
+                INSTALL_MODE="global"
+                shift
+                ;;
+            --project|-p)
+                INSTALL_MODE="project"
+                shift
+                ;;
+            --uninstall|-u)
+                action="uninstall"
+                shift
+                ;;
+            --help|-h)
+                show_help
+                exit 0
+                ;;
+            *)
+                print_error "Unknown option: $1"
+                echo "Use --help for usage information."
+                exit 1
+                ;;
+        esac
+    done
+
+    case "$action" in
+        install)
+            # If mode not set via flag, prompt interactively
+            if [[ -z "$INSTALL_MODE" ]]; then
+                select_install_mode
+            else
+                setup_directories
+            fi
             install
+            ;;
+        uninstall)
+            uninstall
             ;;
     esac
 }

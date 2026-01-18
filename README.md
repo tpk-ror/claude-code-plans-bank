@@ -18,9 +18,9 @@ This project provides tools to automatically rename your plans to a descriptive 
 {category}-{extracted-name}-{MM.DD.YY}-{HHMM}.md
 ```
 
-**Before:** `./plans/groovy-gathering-chipmunk.md`
+**Before:** `./docs/plans/groovy-gathering-chipmunk.md`
 
-**After:** `./plans/feature-add-user-authentication-01.18.26-1430.md`
+**After:** `./docs/plans/feature-add-user-authentication-01.18.26-1430.md`
 
 The time is in Central timezone (America/Chicago) in 24-hour format.
 
@@ -32,6 +32,24 @@ Categories are auto-detected from plan headers: `bugfix-`, `refactor-`, `docs-`,
 git clone https://github.com/tpk-ror/claude-code-plans-bank.git
 cd claude-code-plans-bank
 ./install.sh
+```
+
+## Installation Scope
+
+Both `install.sh` and `quick-install.sh` support two installation modes:
+
+| Mode | Location | Settings File | Best For |
+|------|----------|---------------|----------|
+| **Global** | `~/.claude/` | `settings.json` | Available in all projects |
+| **Project** | `./.claude/` | `settings.local.json` | Only this project |
+
+For non-interactive installation:
+```bash
+# Global install
+curl -fsSL https://raw.githubusercontent.com/tpk-ror/claude-code-plans-bank/main/quick-install.sh | bash -s -- --global
+
+# Project install
+curl -fsSL https://raw.githubusercontent.com/tpk-ror/claude-code-plans-bank/main/quick-install.sh | bash -s -- --project
 ```
 
 ## Installation Options
@@ -61,7 +79,7 @@ A manual command you run when you want to rename a plan.
 ```
 
 **How it works:**
-1. Finds the most recent `.md` file in `./plans/` with default naming
+1. Finds the most recent `.md` file in `./docs/plans/` with default naming
 2. Extracts the first `# Header` for naming (or uses your custom name)
 3. Renames the file in place with descriptive name
 4. Optionally commits to git
@@ -77,11 +95,13 @@ Automatically renames plans when Claude Code stops responding.
 
 **Configuration:**
 
-If you have an existing `~/.claude/settings.json`, add this hook configuration:
+Add this hook configuration to your settings file:
+- Global: `~/.claude/settings.json`
+- Project: `./.claude/settings.local.json`
 
 ```json
 {
-  "plansDirectory": "./plans",
+  "plansDirectory": "./docs/plans",
   "hooks": {
     "Stop": [
       {
@@ -98,9 +118,11 @@ If you have an existing `~/.claude/settings.json`, add this hook configuration:
 }
 ```
 
+For project-specific installs, use `./.claude/hooks/organize-plan.sh` instead.
+
 **How it works:**
 1. Hook fires when Claude stops responding
-2. Scans `./plans/` for files with default naming (adjective-noun-animal pattern)
+2. Scans `./docs/plans/` for files with default naming (adjective-noun-animal pattern)
 3. Extracts the first `# Header` from each file
 4. Renames to `{category}-{name}-{date}.md`
 5. Skips already-organized files
@@ -122,7 +144,7 @@ One-liner installation that sets up slash commands + automatic hook.
 
 ### Option D: Always-On Auto-Save (Recommended)
 
-Automatically renames plans in your project's `./plans/` directory when Claude Code stops.
+Automatically renames plans in your project's `./docs/plans/` directory when Claude Code stops.
 
 **Install:**
 ```bash
@@ -143,7 +165,7 @@ Or via the interactive installer:
 **Features:**
 - **Auto-rename**: Plans with default names (word-word-word.md) automatically get descriptive names
 - **Auto-categorize**: Detects category from header (bugfix, refactor, docs, test, feature)
-- **Auto-archive**: Moves plans older than 30 days to `./plans/archive/`
+- **Auto-archive**: Moves plans older than 30 days to `./docs/plans/archive/`
 - **Auto-commit**: Commits each renamed plan to git
 
 **Configuration:**
@@ -152,7 +174,7 @@ Edit `~/.claude/plans-bank-config.json`:
 ```json
 {
   "alwaysOn": true,
-  "targetDirectory": "./plans",
+  "targetDirectory": "./docs/plans",
   "autoCommit": true,
   "autoArchive": {
     "enabled": true,
@@ -215,7 +237,7 @@ claude-code-plans-bank/
 ├── option-b-automatic/
 │   ├── settings.json              # Settings snippet to merge
 │   └── hooks/
-│       └── organize-plan.sh       # Hook script for ./plans/
+│       └── organize-plan.sh       # Hook script for ./docs/plans/
 │
 ├── option-c-plugin/
 │   ├── README.md                  # Option C documentation
@@ -239,11 +261,7 @@ claude-code-plans-bank/
 
 ### Custom Plans Directory
 
-By default, plans are in `./plans/` in your project. To change this:
-
-1. For slash command: Edit `~/.claude/commands/save-plan.md`
-
-2. For automatic hook: Edit `~/.claude/hooks/organize-plan.sh` and change `PLANS_DIR`
+By default, plans are in `./docs/plans/` in your project. This is configured via `plansDirectory` in your settings file.
 
 ### Disabling Git Commits
 
@@ -267,7 +285,7 @@ The `--commit` flag is opt-in. If you never want git integration, simply don't u
 
 ### "No plan file found"
 
-Make sure you have a plan in `./plans/` with a default name (word-word-word.md pattern). Claude Code saves plans there when using plan mode with `"plansDirectory": "./plans"` in your settings.
+Make sure you have a plan in `./docs/plans/` with a default name (word-word-word.md pattern). Claude Code saves plans there when using plan mode with `"plansDirectory": "./docs/plans"` in your settings.
 
 ### Hook not running
 
@@ -277,7 +295,7 @@ Make sure you have a plan in `./plans/` with a default name (word-word-word.md p
 
 ### Duplicate handling not working
 
-The duplicate detection checks the target directory (`./plans/`). If you see unexpected behavior, check file permissions.
+The duplicate detection checks the target directory (`./docs/plans/`). If you see unexpected behavior, check file permissions.
 
 ### Name extraction wrong
 
@@ -286,7 +304,7 @@ The tool extracts the first line starting with `# `. If your plan doesn't have a
 ## Uninstalling
 
 ```bash
-./install.sh  # Choose option 6
+./install.sh  # Choose option 6, then select Global, Project, or Both
 ```
 
 Or via curl:
@@ -294,19 +312,7 @@ Or via curl:
 curl -fsSL https://raw.githubusercontent.com/tpk-ror/claude-code-plans-bank/main/quick-install.sh | bash -s -- --uninstall
 ```
 
-Or manually:
-```bash
-rm ~/.claude/commands/save-plan.md
-rm ~/.claude/commands/list-plans.md
-rm ~/.claude/commands/search-plans.md
-rm ~/.claude/commands/archive-plan.md
-rm ~/.claude/commands/sync-status.md
-rm ~/.claude/hooks/organize-plan.sh
-rm ~/.claude/hooks/plans-bank-sync.sh
-rm ~/.claude/shared/plan-utils.sh
-rm ~/.claude/plans-bank-config.json
-# Edit ~/.claude/settings.json to remove the hooks
-```
+The uninstaller will prompt you to choose which installation to remove (Global, Project, or Both).
 
 ## Contributing
 

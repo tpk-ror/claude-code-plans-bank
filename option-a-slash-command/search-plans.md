@@ -4,7 +4,7 @@ allowed-tools: Bash, Read
 argument-hint: <search-term> [--case-sensitive] [--archived]
 ---
 
-Search for a keyword or phrase in all plan files in `./plans/` (project-local).
+Search for a keyword or phrase in all plan files in `./docs/plans/` (project-local).
 
 ## Instructions
 
@@ -14,7 +14,7 @@ Follow these steps to search plans:
 
 The first non-flag argument is the search term (required). Additional flags:
 - `--case-sensitive` - Match case exactly (default is case-insensitive)
-- `--archived` - Also search `./plans/archive/`
+- `--archived` - Also search `./docs/plans/archive/`
 
 If no search term is provided, show usage and exit:
 ```
@@ -30,8 +30,8 @@ GREP_FLAGS="-rn -i"
 # If --case-sensitive flag provided
 # GREP_FLAGS="-rn"
 
-LOCAL_DIR="./plans"
-ARCHIVE_DIR="./plans/archive"
+LOCAL_DIR="./docs/plans"
+ARCHIVE_DIR="./docs/plans/archive"
 ```
 
 ### Step 3: Search Project Plans
@@ -59,11 +59,11 @@ Group results by file and show line numbers with context:
 ```
 Found 3 matches in 2 plans:
 
-./plans/feature-auth-01.18.26.md:
+./docs/plans/feature-auth-01.18.26.md:
   Line 12: "...OAuth authentication provider..."
   Line 45: "...authentication tokens should..."
 
-./plans/bugfix-login-01.17.26.md:
+./docs/plans/bugfix-login-01.17.26.md:
   Line 8: "...fix authentication flow..."
 ```
 
@@ -120,11 +120,11 @@ Found N matches in M plans.
 ```
 Found 3 matches in 2 plans:
 
-./plans/feature-auth-01.18.26.md:
+./docs/plans/feature-auth-01.18.26.md:
   Line 12: "...integrate OAuth authentication provider for SSO..."
   Line 45: "...authentication tokens should expire after 24h..."
 
-./plans/bugfix-login-01.17.26.md:
+./docs/plans/bugfix-login-01.17.26.md:
   Line 8: "...fix authentication flow for edge cases..."
 
 Total: 3 matches in 2 files
@@ -140,6 +140,6 @@ Usage: /search-plans <search-term> [--case-sensitive] [--archived]
 
 If plans directory doesn't exist:
 ```
-No plan directory found. Expected: ./plans/
+No plan directory found. Expected: ./docs/plans/
 Run /save-plan first to create a plan.
 ```

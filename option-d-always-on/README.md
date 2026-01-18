@@ -1,34 +1,51 @@
 # Option D: Always-On Auto-Save
 
-Automatically rename plans in your project's `./plans/` directory from default names to descriptive format - no manual commands required.
+Automatically rename plans in your project's `./docs/plans/` directory from default names to descriptive format - no manual commands required.
 
 ## How It Works
 
-Option D uses a Claude Code Stop hook that runs when each session ends. It scans `./plans/` for files with default naming (word-word-word.md) and renames them to descriptive format.
+Option D uses a Claude Code Stop hook that runs when each session ends. It scans `./docs/plans/` for files with default naming (word-word-word.md) and renames them to descriptive format.
 
 ## Features
 
 - **Automatic Rename**: Plans are renamed without manual intervention
 - **Smart Categories**: Auto-detects category from plan header (bugfix, refactor, docs, test, feature)
-- **Auto-Archive**: Moves old plans (30+ days) to `./plans/archive/`
+- **Auto-Archive**: Moves old plans (30+ days) to `./docs/plans/archive/`
 - **Auto-Commit**: Optionally commits each renamed plan to git
-- **Configurable**: Customize behavior via `~/.claude/plans-bank-config.json`
+- **Configurable**: Customize behavior via config file
+- **Global or Project**: Install globally or per-project
+
+## Installation Modes
+
+| Mode | Location | Settings File | Best For |
+|------|----------|---------------|----------|
+| **Global** | `~/.claude/` | `settings.json` | Available in all projects |
+| **Project** | `./.claude/` | `settings.local.json` | Only this project |
 
 ## Installation
 
 ### Via Interactive Installer
 
 ```bash
-./install.sh  # Choose option 4 (Always-On) or option 5 (Everything)
+./install.sh  # Choose Global or Project, then option 4 (Always-On) or option 5 (Everything)
 ```
 
 ### Via Quick Install
 
 ```bash
+# Interactive (prompts for scope)
 curl -fsSL https://raw.githubusercontent.com/tpk-ror/claude-code-plans-bank/main/quick-install.sh | bash
+
+# Global install
+curl -fsSL https://raw.githubusercontent.com/tpk-ror/claude-code-plans-bank/main/quick-install.sh | bash -s -- --global
+
+# Project install
+curl -fsSL https://raw.githubusercontent.com/tpk-ror/claude-code-plans-bank/main/quick-install.sh | bash -s -- --project
 ```
 
 ### Manual Installation
+
+**For Global Install:**
 
 1. Copy the hook script:
    ```bash
@@ -51,7 +68,7 @@ curl -fsSL https://raw.githubusercontent.com/tpk-ror/claude-code-plans-bank/main
 4. Add hook to `~/.claude/settings.json`:
    ```json
    {
-     "plansDirectory": "./plans",
+     "plansDirectory": "./docs/plans",
      "hooks": {
        "Stop": [{
          "matcher": "*",
@@ -61,14 +78,22 @@ curl -fsSL https://raw.githubusercontent.com/tpk-ror/claude-code-plans-bank/main
    }
    ```
 
+**For Project Install:**
+
+1. Copy files to `./.claude/` instead of `~/.claude/`
+2. Use `./.claude/settings.local.json` for configuration
+3. Use `./.claude/hooks/plans-bank-sync.sh stop` in the hook command
+
 ## Configuration
 
-Edit `~/.claude/plans-bank-config.json` to customize behavior:
+Edit the config file to customize behavior:
+- Global: `~/.claude/plans-bank-config.json`
+- Project: `./.claude/plans-bank-config.json`
 
 ```json
 {
   "alwaysOn": true,
-  "targetDirectory": "./plans",
+  "targetDirectory": "./docs/plans",
   "autoCommit": true,
   "categories": {
     "bugfix": ["bug", "fix", "issue", "error", "patch"],
@@ -79,7 +104,7 @@ Edit `~/.claude/plans-bank-config.json` to customize behavior:
   "autoArchive": {
     "enabled": true,
     "olderThanDays": 30,
-    "archiveDirectory": "./plans/archive"
+    "archiveDirectory": "./docs/plans/archive"
   }
 }
 ```
@@ -89,7 +114,7 @@ Edit `~/.claude/plans-bank-config.json` to customize behavior:
 | Option | Default | Description |
 |--------|---------|-------------|
 | `alwaysOn` | `true` | Enable/disable automatic renaming |
-| `targetDirectory` | `./plans` | Local project plans directory |
+| `targetDirectory` | `./docs/plans` | Local project plans directory |
 | `autoCommit` | `true` | Automatically git commit renamed plans |
 | `autoArchive.enabled` | `true` | Enable auto-archiving of old plans |
 | `autoArchive.olderThanDays` | `30` | Archive plans older than N days |
@@ -148,15 +173,31 @@ To temporarily disable renaming:
    }
    ```
 
-2. Or remove the hook from `~/.claude/settings.json`
+2. Or remove the hook from your settings file
 
 ## Troubleshooting
 
 ### Plans not being renamed
 
-1. Check that `~/.claude/hooks/plans-bank-sync.sh` exists and is executable
-2. Verify hook is configured in `~/.claude/settings.json`
-3. Run `~/.claude/hooks/plans-bank-sync.sh status` to see current status
+1. Check that the hook script exists and is executable:
+   ```bash
+   # Global
+   ls -la ~/.claude/hooks/plans-bank-sync.sh
+
+   # Project
+   ls -la ./.claude/hooks/plans-bank-sync.sh
+   ```
+
+2. Verify hook is configured in your settings file
+
+3. Run the status command to see current status:
+   ```bash
+   # Global
+   ~/.claude/hooks/plans-bank-sync.sh status
+
+   # Project
+   ./.claude/hooks/plans-bank-sync.sh status
+   ```
 
 ### Auto-commit not working
 
@@ -164,9 +205,20 @@ Ensure you're in a git repository and have `autoCommit: true` in config.
 
 ## Files Installed
 
+### Global Install
+
 | File | Purpose |
 |------|---------|
 | `~/.claude/hooks/plans-bank-sync.sh` | Main rename hook script |
 | `~/.claude/shared/plan-utils.sh` | Shared utility functions |
 | `~/.claude/plans-bank-config.json` | Configuration file |
 | `~/.claude/commands/sync-status.md` | Slash command for status |
+
+### Project Install
+
+| File | Purpose |
+|------|---------|
+| `./.claude/hooks/plans-bank-sync.sh` | Main rename hook script |
+| `./.claude/shared/plan-utils.sh` | Shared utility functions |
+| `./.claude/plans-bank-config.json` | Configuration file |
+| `./.claude/commands/sync-status.md` | Slash command for status |

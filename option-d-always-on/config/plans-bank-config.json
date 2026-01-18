@@ -1,6 +1,6 @@
 {
   "alwaysOn": true,
-  "targetDirectory": "./plans",
+  "targetDirectory": "./docs/plans",
   "autoCommit": true,
   "categories": {
     "bugfix": ["bug", "fix", "issue", "error", "patch"],
@@ -11,6 +11,6 @@
   "autoArchive": {
     "enabled": true,
     "olderThanDays": 30,
-    "archiveDirectory": "./plans/archive"
+    "archiveDirectory": "./docs/plans/archive"
   }
 }

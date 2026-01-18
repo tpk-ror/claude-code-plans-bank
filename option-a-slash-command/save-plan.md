@@ -1,23 +1,23 @@
 ---
-description: Save and rename current plan to project's ./plans/ folder
+description: Save and rename current plan to project's ./docs/plans/ folder
 allowed-tools: Bash, Read, Write
 argument-hint: [custom-name] [--commit]
 ---
 
-Rename the most recent plan file in `./plans/` from default naming (word-word-word.md) to a descriptive format.
+Rename the most recent plan file in `./docs/plans/` from default naming (word-word-word.md) to a descriptive format.
 
 ## Instructions
 
 Follow these steps to save and organize the plan:
 
 ### Step 1: Find the most recent plan with default naming
-Find the most recently modified .md file in `./plans/` that has default naming (word-word-word.md pattern):
+Find the most recently modified .md file in `./docs/plans/` that has default naming (word-word-word.md pattern):
 ```bash
 # Create plans directory if it doesn't exist
-mkdir -p ./plans
+mkdir -p ./docs/plans
 
 # Find most recent .md file
-find ./plans -maxdepth 1 -name "*.md" -type f -printf '%T@ %p\n' | sort -rn | head -5 | cut -d' ' -f2-
+find ./docs/plans -maxdepth 1 -name "*.md" -type f -printf '%T@ %p\n' | sort -rn | head -5 | cut -d' ' -f2-
 ```
 
 Look for files matching the default Claude Code naming pattern: `word-word-word.md` (e.g., `groovy-gathering-chipmunk.md`).
@@ -51,22 +51,22 @@ Example: If the header is "Fix Login Error" at 2:30 PM Central, generate:
 `bugfix-fix-login-error-01.18.26-1430.md`
 
 ### Step 6: Handle duplicates
-If the filename already exists in `./plans/`, append a suffix:
+If the filename already exists in `./docs/plans/`, append a suffix:
 - `feature-name-01.18.26-1430-2.md`
 - `feature-name-01.18.26-1430-3.md`
 - etc.
 
 ### Step 7: Rename the file
-Rename the plan file in place within `./plans/`:
+Rename the plan file in place within `./docs/plans/`:
 ```bash
-mv ./plans/old-name.md ./plans/new-name.md
+mv ./docs/plans/old-name.md ./docs/plans/new-name.md
 ```
 
 ### Step 8: Handle arguments
 - If a custom name is provided (not `--commit`), use that instead of extracting from the header
 - If `--commit` flag is present, also run:
   ```bash
-  git add ./plans/{filename}
+  git add ./docs/plans/{filename}
   git commit -m "Add plan: {filename-without-extension}"
   ```
 
@@ -79,13 +79,13 @@ Report the new file path and any actions taken.
 ```
 /save-plan
 ```
-Renames `./plans/groovy-chipmunk-whatever.md` to `./plans/feature-implement-dark-mode-01.18.26-1430.md`
+Renames `./docs/plans/groovy-chipmunk-whatever.md` to `./docs/plans/feature-implement-dark-mode-01.18.26-1430.md`
 
 **With custom name:**
 ```
 /save-plan auth-system-redesign
 ```
-Creates `./plans/feature-auth-system-redesign-01.18.26-1430.md`
+Creates `./docs/plans/feature-auth-system-redesign-01.18.26-1430.md`
 
 **With git commit:**
 ```

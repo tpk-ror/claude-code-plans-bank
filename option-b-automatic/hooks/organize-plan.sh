@@ -6,15 +6,33 @@
 set -e
 
 # Configuration
-PLANS_DIR="./plans"
+PLANS_DIR="./docs/plans"
 
-# Source shared utilities if available
+# Source shared utilities with cascading fallback
+# Priority order:
+# 1) Project-local ./.claude/shared/plan-utils.sh
+# 2) Global ~/.claude/shared/plan-utils.sh
+# 3) Relative to script location
+# 4) Inline fallback functions
+
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-UTILS_FILE="${SCRIPT_DIR}/../../shared/plan-utils.sh"
+UTILS_LOCATIONS=(
+    "./.claude/shared/plan-utils.sh"
+    "$HOME/.claude/shared/plan-utils.sh"
+    "${SCRIPT_DIR}/../shared/plan-utils.sh"
+    "${SCRIPT_DIR}/../../shared/plan-utils.sh"
+)
 
-if [[ -f "$UTILS_FILE" ]]; then
-    source "$UTILS_FILE"
-else
+UTILS_LOADED=false
+for utils_path in "${UTILS_LOCATIONS[@]}"; do
+    if [[ -f "$utils_path" ]]; then
+        source "$utils_path"
+        UTILS_LOADED=true
+        break
+    fi
+done
+
+if [[ "$UTILS_LOADED" = false ]]; then
     # Inline utility functions if shared file not found
 
     extract_plan_name() {
@@ -34,8 +52,9 @@ else
     generate_filename() {
         local name="$1"
         local target_dir="$2"
-        local date=$(date +"%m.%d.%y")
-        local base="feature-${name}-${date}"
+        local date=$(TZ='America/Chicago' date +"%m.%d.%y")
+        local time=$(TZ='America/Chicago' date +"%H%M")
+        local base="feature-${name}-${date}-${time}"
         local filename="${base}.md"
         local counter=2
 
@@ -54,7 +73,7 @@ else
 
     is_organized_name() {
         local filename="$1"
-        [[ "$filename" =~ ^feature-.*-[0-9]{2}\.[0-9]{2}\.[0-9]{2}(-[0-9]+)?\.md$ ]]
+        [[ "$filename" =~ ^(feature|bugfix|refactor|docs|test)-.*-[0-9]{2}\.[0-9]{2}\.[0-9]{2}(-[0-9]{4})?(-[0-9]+)?\.md$ ]]
     }
 fi
 
