@@ -5,7 +5,7 @@ One-liner installation that sets up everything automatically.
 ## Installation
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/yourusername/claude-code-plans-bank/main/quick-install.sh | bash
+curl -fsSL https://raw.githubusercontent.com/tpk-ror/claude-code-plans-bank/main/quick-install.sh | bash
 ```
 
 ## What Gets Installed
@@ -68,7 +68,7 @@ If auto-merge isn't possible, add this to your `~/.claude/settings.json`:
 
 **Via curl:**
 ```bash
-curl -fsSL https://raw.githubusercontent.com/yourusername/claude-code-plans-bank/main/quick-install.sh | bash -s -- --uninstall
+curl -fsSL https://raw.githubusercontent.com/tpk-ror/claude-code-plans-bank/main/quick-install.sh | bash -s -- --uninstall
 ```
 
 **Via local script:**

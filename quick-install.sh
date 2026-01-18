@@ -1,6 +1,6 @@
 #!/bin/bash
 # quick-install.sh - One-liner installer for claude-code-plans-bank
-# Usage: curl -fsSL https://raw.githubusercontent.com/yourusername/claude-code-plans-bank/main/quick-install.sh | bash
+# Usage: curl -fsSL https://raw.githubusercontent.com/tpk-ror/claude-code-plans-bank/main/quick-install.sh | bash
 # Uninstall: curl -fsSL ... | bash -s -- --uninstall
 
 set -e
@@ -13,7 +13,7 @@ BLUE='\033[0;34m'
 NC='\033[0m' # No Color
 
 # GitHub raw content base URL
-GITHUB_RAW="https://raw.githubusercontent.com/yourusername/claude-code-plans-bank/main"
+GITHUB_RAW="https://raw.githubusercontent.com/tpk-ror/claude-code-plans-bank/main"
 
 # Directories
 CLAUDE_DIR="$HOME/.claude"

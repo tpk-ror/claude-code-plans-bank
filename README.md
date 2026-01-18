@@ -25,7 +25,7 @@ feature-{extracted-name}-{MM.DD.YY}.md
 ## Quick Start
 
 ```bash
-git clone https://github.com/yourusername/claude-code-plans-bank.git
+git clone https://github.com/tpk-ror/claude-code-plans-bank.git
 cd claude-code-plans-bank
 ./install.sh
 ```
@@ -108,7 +108,7 @@ One-liner installation that sets up everything automatically.
 
 **Install:**
 ```bash
-curl -fsSL https://raw.githubusercontent.com/yourusername/claude-code-plans-bank/main/quick-install.sh | bash
+curl -fsSL https://raw.githubusercontent.com/tpk-ror/claude-code-plans-bank/main/quick-install.sh | bash
 ```
 
 Or via the interactive installer:
@@ -124,7 +124,7 @@ Or via the interactive installer:
 
 **Uninstall:**
 ```bash
-curl -fsSL https://raw.githubusercontent.com/yourusername/claude-code-plans-bank/main/quick-install.sh | bash -s -- --uninstall
+curl -fsSL https://raw.githubusercontent.com/tpk-ror/claude-code-plans-bank/main/quick-install.sh | bash -s -- --uninstall
 ```
 
 ## Naming Format
@@ -224,7 +224,7 @@ The tool extracts the first line starting with `# `. If your plan doesn't have a
 
 Or via curl (if installed with Option C):
 ```bash
-curl -fsSL https://raw.githubusercontent.com/yourusername/claude-code-plans-bank/main/quick-install.sh | bash -s -- --uninstall
+curl -fsSL https://raw.githubusercontent.com/tpk-ror/claude-code-plans-bank/main/quick-install.sh | bash -s -- --uninstall
 ```
 
 Or manually:
