@@ -1,5 +1,9 @@
 # Claude Code Plans Bank
 
+<p align="center">
+  <img src="image.svg" alt="Claude Code Plans Bank" width="800">
+</p>
+
 Organize your Claude Code plan files with descriptive, date-stamped naming conventions.
 
 ## The Problem
