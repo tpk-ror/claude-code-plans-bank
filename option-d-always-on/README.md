@@ -1,23 +1,17 @@
 # Option D: Always-On Auto-Save
 
-Automatically sync plans from `~/.claude/plans/` to your project's `./plans/` directory with proper naming - no manual commands required.
+Automatically rename plans in your project's `./plans/` directory from default names to descriptive format - no manual commands required.
 
 ## How It Works
 
-Option D uses two Claude Code hooks:
-
-1. **SessionStart Hook**: Catches up on plans created while offline or in other projects
-2. **Stop Hook**: Processes plans after each session ends
-
-Plans are **copied** (not moved) from the global `~/.claude/plans/` directory to your local `./plans/` folder with descriptive naming.
+Option D uses a Claude Code Stop hook that runs when each session ends. It scans `./plans/` for files with default naming (word-word-word.md) and renames them to descriptive format.
 
 ## Features
 
-- **Automatic Sync**: Plans are synced without manual intervention
+- **Automatic Rename**: Plans are renamed without manual intervention
 - **Smart Categories**: Auto-detects category from plan header (bugfix, refactor, docs, test, feature)
-- **Content Hash Tracking**: Prevents duplicate syncs across projects
 - **Auto-Archive**: Moves old plans (30+ days) to `./plans/archive/`
-- **Auto-Commit**: Optionally commits each synced plan to git
+- **Auto-Commit**: Optionally commits each renamed plan to git
 - **Configurable**: Customize behavior via `~/.claude/plans-bank-config.json`
 
 ## Installation
@@ -54,14 +48,11 @@ curl -fsSL https://raw.githubusercontent.com/tpk-ror/claude-code-plans-bank/main
    cp option-d-always-on/config/plans-bank-config.json ~/.claude/plans-bank-config.json
    ```
 
-4. Add hooks to `~/.claude/settings.json`:
+4. Add hook to `~/.claude/settings.json`:
    ```json
    {
+     "plansDirectory": "./plans",
      "hooks": {
-       "SessionStart": [{
-         "matcher": "*",
-         "hooks": [{"type": "command", "command": "~/.claude/hooks/plans-bank-sync.sh session-start"}]
-       }],
        "Stop": [{
          "matcher": "*",
          "hooks": [{"type": "command", "command": "~/.claude/hooks/plans-bank-sync.sh stop"}]
@@ -77,9 +68,7 @@ Edit `~/.claude/plans-bank-config.json` to customize behavior:
 ```json
 {
   "alwaysOn": true,
-  "sourceDirectory": "~/.claude/plans",
   "targetDirectory": "./plans",
-  "namingPrefix": "feature",
   "autoCommit": true,
   "categories": {
     "bugfix": ["bug", "fix", "issue", "error", "patch"],
@@ -99,11 +88,9 @@ Edit `~/.claude/plans-bank-config.json` to customize behavior:
 
 | Option | Default | Description |
 |--------|---------|-------------|
-| `alwaysOn` | `true` | Enable/disable automatic syncing |
-| `sourceDirectory` | `~/.claude/plans` | Global plans directory |
+| `alwaysOn` | `true` | Enable/disable automatic renaming |
 | `targetDirectory` | `./plans` | Local project plans directory |
-| `namingPrefix` | `feature` | Default prefix for uncategorized plans |
-| `autoCommit` | `true` | Automatically git commit synced plans |
+| `autoCommit` | `true` | Automatically git commit renamed plans |
 | `autoArchive.enabled` | `true` | Enable auto-archiving of old plans |
 | `autoArchive.olderThanDays` | `30` | Archive plans older than N days |
 
@@ -112,8 +99,10 @@ Edit `~/.claude/plans-bank-config.json` to customize behavior:
 Plans are named based on their content:
 
 ```
-{category}-{sanitized-header}-{MM.DD.YY}.md
+{category}-{sanitized-header}-{MM.DD.YY}-{HHMM}.md
 ```
+
+The time is in Central timezone (America/Chicago) in 24-hour format.
 
 ### Categories
 
@@ -121,49 +110,36 @@ The category is auto-detected from the plan's first `# Header`:
 
 | Category | Keywords | Example |
 |----------|----------|---------|
-| `bugfix` | bug, fix, issue, error, patch | `bugfix-fix-login-error-01.18.26.md` |
-| `refactor` | refactor, cleanup, reorganize | `refactor-api-cleanup-01.18.26.md` |
-| `docs` | documentation, readme, guide | `docs-api-guide-01.18.26.md` |
-| `test` | test, spec, coverage | `test-auth-coverage-01.18.26.md` |
-| `feature` | (default) | `feature-add-dark-mode-01.18.26.md` |
+| `bugfix` | bug, fix, issue, error, patch | `bugfix-fix-login-error-01.18.26-1430.md` |
+| `refactor` | refactor, cleanup, reorganize | `refactor-api-cleanup-01.18.26-1430.md` |
+| `docs` | documentation, readme, guide | `docs-api-guide-01.18.26-1430.md` |
+| `test` | test, spec, coverage | `test-auth-coverage-01.18.26-1430.md` |
+| `feature` | (default) | `feature-add-dark-mode-01.18.26-1430.md` |
 
 ### Duplicate Handling
 
 Same-day duplicates get numeric suffixes:
-- `feature-my-plan-01.18.26.md`
-- `feature-my-plan-01.18.26-2.md`
-- `feature-my-plan-01.18.26-3.md`
+- `feature-my-plan-01.18.26-1430.md`
+- `feature-my-plan-01.18.26-1430-2.md`
+- `feature-my-plan-01.18.26-1430-3.md`
 
-## Sync Status
+## Status Check
 
-Use the `/sync-status` command to check sync status:
+Use the `/sync-status` command to check status:
 
 ```
 /sync-status
 ```
 
 Shows:
-- Pending (unsynced) plans
-- Recently synced plans
+- Plans pending rename (default-named)
+- Organized plans
 - Current configuration
 - Archive statistics
 
-## How Tracking Works
-
-Plans are tracked by content hash in `~/.claude/.plans-bank-processed`:
-
-```
-<md5_hash>|<target_path>|<timestamp>
-```
-
-This prevents:
-- Re-syncing the same plan multiple times
-- Duplicate files when working across projects
-- Syncing already-organized files
-
 ## Disabling
 
-To temporarily disable syncing:
+To temporarily disable renaming:
 
 1. Set `alwaysOn: false` in config:
    ```json
@@ -172,19 +148,15 @@ To temporarily disable syncing:
    }
    ```
 
-2. Or remove the hooks from `~/.claude/settings.json`
+2. Or remove the hook from `~/.claude/settings.json`
 
 ## Troubleshooting
 
-### Plans not syncing
+### Plans not being renamed
 
 1. Check that `~/.claude/hooks/plans-bank-sync.sh` exists and is executable
-2. Verify hooks are configured in `~/.claude/settings.json`
+2. Verify hook is configured in `~/.claude/settings.json`
 3. Run `~/.claude/hooks/plans-bank-sync.sh status` to see current status
-
-### Duplicate plans appearing
-
-Check `~/.claude/.plans-bank-processed` - if corrupted, delete it to reset tracking.
 
 ### Auto-commit not working
 
@@ -194,8 +166,7 @@ Ensure you're in a git repository and have `autoCommit: true` in config.
 
 | File | Purpose |
 |------|---------|
-| `~/.claude/hooks/plans-bank-sync.sh` | Main sync hook script |
+| `~/.claude/hooks/plans-bank-sync.sh` | Main rename hook script |
 | `~/.claude/shared/plan-utils.sh` | Shared utility functions |
 | `~/.claude/plans-bank-config.json` | Configuration file |
-| `~/.claude/.plans-bank-processed` | Tracking log (auto-created) |
 | `~/.claude/commands/sync-status.md` | Slash command for status |

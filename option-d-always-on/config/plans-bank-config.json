@@ -1,8 +1,6 @@
 {
   "alwaysOn": true,
-  "sourceDirectory": "~/.claude/plans",
   "targetDirectory": "./plans",
-  "namingPrefix": "feature",
   "autoCommit": true,
   "categories": {
     "bugfix": ["bug", "fix", "issue", "error", "patch"],

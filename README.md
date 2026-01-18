@@ -12,15 +12,17 @@ When you create plans in Claude Code's plan mode, they get saved with auto-gener
 
 ## The Solution
 
-This project provides four options to automatically rename your plans to a descriptive format:
+This project provides tools to automatically rename your plans to a descriptive format:
 
 ```
-{category}-{extracted-name}-{MM.DD.YY}.md
+{category}-{extracted-name}-{MM.DD.YY}-{HHMM}.md
 ```
 
-**Before:** `~/.claude/plans/groovy-gathering-chipmunk.md`
+**Before:** `./plans/groovy-gathering-chipmunk.md`
 
-**After:** `./plans/feature-add-user-authentication-01.18.26.md`
+**After:** `./plans/feature-add-user-authentication-01.18.26-1430.md`
+
+The time is in Central timezone (America/Chicago) in 24-hour format.
 
 Categories are auto-detected from plan headers: `bugfix-`, `refactor-`, `docs-`, `test-`, or `feature-` (default).
 
@@ -36,7 +38,7 @@ cd claude-code-plans-bank
 
 ### Option A: Slash Command (Recommended)
 
-A manual command you run when you want to save a plan.
+A manual command you run when you want to rename a plan.
 
 **Install:**
 ```bash
@@ -59,11 +61,10 @@ A manual command you run when you want to save a plan.
 ```
 
 **How it works:**
-1. Finds the most recent `.md` file in `~/.claude/plans/`
+1. Finds the most recent `.md` file in `./plans/` with default naming
 2. Extracts the first `# Header` for naming (or uses your custom name)
-3. Creates `./plans/` directory if needed
-4. Moves and renames the file
-5. Optionally commits to git
+3. Renames the file in place with descriptive name
+4. Optionally commits to git
 
 ### Option B: Automatic Hook
 
@@ -101,7 +102,7 @@ If you have an existing `~/.claude/settings.json`, add this hook configuration:
 1. Hook fires when Claude stops responding
 2. Scans `./plans/` for files with default naming (adjective-noun-animal pattern)
 3. Extracts the first `# Header` from each file
-4. Renames to `feature-{name}-{date}.md`
+4. Renames to `{category}-{name}-{date}.md`
 5. Skips already-organized files
 
 ### Option C: Quick Plugin
@@ -121,7 +122,7 @@ One-liner installation that sets up slash commands + automatic hook.
 
 ### Option D: Always-On Auto-Save (Recommended)
 
-Automatically syncs plans from `~/.claude/plans/` to your project's `./plans/` directory.
+Automatically renames plans in your project's `./plans/` directory when Claude Code stops.
 
 **Install:**
 ```bash
@@ -135,17 +136,15 @@ Or via the interactive installer:
 
 **What gets installed:**
 - All slash commands including `/sync-status`
-- SessionStart hook (syncs plans when Claude Code starts)
-- Stop hook (syncs plans when Claude Code stops)
+- Stop hook (renames plans when Claude Code stops)
 - Configuration file (`~/.claude/plans-bank-config.json`)
 - Shared utilities
 
 **Features:**
-- **Auto-sync**: Plans automatically copied from `~/.claude/plans/` to `./plans/`
+- **Auto-rename**: Plans with default names (word-word-word.md) automatically get descriptive names
 - **Auto-categorize**: Detects category from header (bugfix, refactor, docs, test, feature)
 - **Auto-archive**: Moves plans older than 30 days to `./plans/archive/`
-- **Auto-commit**: Commits each synced plan to git
-- **Content tracking**: Prevents duplicate syncs via MD5 hash
+- **Auto-commit**: Commits each renamed plan to git
 
 **Configuration:**
 
@@ -153,7 +152,6 @@ Edit `~/.claude/plans-bank-config.json`:
 ```json
 {
   "alwaysOn": true,
-  "sourceDirectory": "~/.claude/plans",
   "targetDirectory": "./plans",
   "autoCommit": true,
   "autoArchive": {
@@ -175,11 +173,12 @@ curl -fsSL https://raw.githubusercontent.com/tpk-ror/claude-code-plans-bank/main
 | `{category}-` | Auto-detected or default `feature-` | `bugfix-`, `feature-` |
 | `{name}` | Sanitized from header or custom | `add-user-auth` |
 | `{MM.DD.YY}` | Date created | `01.18.26` |
+| `{HHMM}` | Time in Central timezone (24hr) | `1430` |
 | `.md` | Markdown extension | `.md` |
 
-**Full example:** `feature-add-user-auth-01.18.26.md`
+**Full example:** `feature-add-user-auth-01.18.26-1430.md`
 
-### Category Detection (Option D)
+### Category Detection
 
 Categories are auto-detected from plan headers:
 
@@ -194,9 +193,9 @@ Categories are auto-detected from plan headers:
 ### Duplicate Handling
 
 If a filename already exists, a numeric suffix is added:
-- `feature-my-plan-01.18.26.md`
-- `feature-my-plan-01.18.26-2.md`
-- `feature-my-plan-01.18.26-3.md`
+- `feature-my-plan-01.18.26-1430.md`
+- `feature-my-plan-01.18.26-1430-2.md`
+- `feature-my-plan-01.18.26-1430-3.md`
 
 ## Project Structure
 
@@ -224,11 +223,11 @@ claude-code-plans-bank/
 │
 ├── option-d-always-on/
 │   ├── README.md                  # Option D documentation
-│   ├── settings.json              # Settings with SessionStart + Stop hooks
+│   ├── settings.json              # Settings with Stop hook
 │   ├── config/
 │   │   └── plans-bank-config.json # Default configuration template
 │   ├── hooks/
-│   │   └── plans-bank-sync.sh     # Main sync hook script
+│   │   └── plans-bank-sync.sh     # Main rename hook script
 │   └── commands/
 │       └── sync-status.md         # /sync-status command
 │
@@ -240,7 +239,7 @@ claude-code-plans-bank/
 
 ### Custom Plans Directory
 
-By default, plans are saved to `./plans/` in your project. To change this:
+By default, plans are in `./plans/` in your project. To change this:
 
 1. For slash command: Edit `~/.claude/commands/save-plan.md`
 
@@ -260,16 +259,15 @@ The `--commit` flag is opt-in. If you never want git integration, simply don't u
 | Setup complexity | Simple | Moderate | Easy | Easiest |
 | One-liner install | No | No | No | Yes |
 | Auto-merge settings | No | No | Yes (with jq) | Yes (with jq) |
-| Syncs from ~/.claude/plans | No | No | No | Yes |
-| Auto-categorize | No | No | No | Yes |
+| Auto-categorize | Yes | Yes | Yes | Yes |
 | Auto-archive | No | No | No | Yes |
-| Best for | Selective saving | Files in ./plans/ | Slash + hook | Full automation |
+| Best for | Selective renaming | Auto on stop | Slash + hook | Full automation |
 
 ## Troubleshooting
 
 ### "No plan file found"
 
-Make sure you have a plan in `~/.claude/plans/`. Claude Code saves plans there when you exit plan mode.
+Make sure you have a plan in `./plans/` with a default name (word-word-word.md pattern). Claude Code saves plans there when using plan mode with `"plansDirectory": "./plans"` in your settings.
 
 ### Hook not running
 
@@ -279,7 +277,7 @@ Make sure you have a plan in `~/.claude/plans/`. Claude Code saves plans there w
 
 ### Duplicate handling not working
 
-The duplicate detection checks the target directory (`./plans/`), not the source. If you see unexpected behavior, check file permissions.
+The duplicate detection checks the target directory (`./plans/`). If you see unexpected behavior, check file permissions.
 
 ### Name extraction wrong
 

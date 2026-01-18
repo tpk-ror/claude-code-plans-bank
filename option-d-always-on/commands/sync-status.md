@@ -1,72 +1,74 @@
 ---
-description: Show plans sync status and configuration
+description: Show plans status and configuration
 allowed-tools: Bash, Read
 argument-hint: [--verbose]
 ---
 
-Show the current sync status for the Plans Bank, including pending plans, recently synced plans, and configuration.
+Show the current status for the Plans Bank, including plans pending rename, organized plans, and configuration.
 
 ## Instructions
 
-Follow these steps to display the sync status:
+Follow these steps to display the status:
 
-### Step 1: Check if sync is configured
+### Step 1: Check if hook is configured
 
 Check if the plans-bank-sync.sh hook exists:
 ```bash
 test -f ~/.claude/hooks/plans-bank-sync.sh && echo "configured" || echo "not configured"
 ```
 
-If not configured, inform the user they need to install Option D (Always-On).
+If not configured, inform the user they may want to install the hook for auto-rename.
 
-### Step 2: Run status command
+### Step 2: Run status command (if hook exists)
 
 If configured, run the status command:
 ```bash
 ~/.claude/hooks/plans-bank-sync.sh status
 ```
 
-### Step 3: List pending plans
+### Step 3: List plans pending rename
 
-List plans in `~/.claude/plans/` that haven't been synced yet:
+List plans in `./plans/` that have default naming (word-word-word.md pattern):
 ```bash
-ls -la ~/.claude/plans/*.md 2>/dev/null | head -10
+for file in ./plans/*.md; do
+    filename=$(basename "$file")
+    if [[ "$filename" =~ ^[a-z]+-[a-z]+-[a-z]+\.md$ ]]; then
+        echo "  - $filename (pending rename)"
+    fi
+done
 ```
 
-### Step 4: List recently synced plans
+### Step 4: List organized plans
 
-Show the last 5 entries from the processed log:
+Show organized plans (those matching the category-name-date pattern):
 ```bash
-tail -5 ~/.claude/.plans-bank-processed 2>/dev/null
+for file in ./plans/*.md; do
+    filename=$(basename "$file")
+    if [[ "$filename" =~ ^(feature|bugfix|refactor|docs|test)-.*-[0-9]{2}\.[0-9]{2}\.[0-9]{2}(-[0-9]+)?\.md$ ]]; then
+        echo "  - $filename"
+    fi
+done
 ```
 
-### Step 5: Show local plans
-
-List plans in the current project's `./plans/` directory:
-```bash
-ls -la ./plans/*.md 2>/dev/null | head -10
-```
-
-### Step 6: Show archive contents (if --verbose)
+### Step 5: Show archive contents (if --verbose)
 
 If `--verbose` flag is provided, also show archived plans:
 ```bash
 ls -la ./plans/archive/*.md 2>/dev/null | head -10
 ```
 
-### Step 7: Display configuration
+### Step 6: Display configuration
 
-Read and display the current configuration:
+Read and display the current configuration (if exists):
 ```bash
 cat ~/.claude/plans-bank-config.json 2>/dev/null || echo "No config file (using defaults)"
 ```
 
-### Step 8: Summarize
+### Step 7: Summarize
 
 Provide a summary to the user:
-- Number of pending (unsynced) plans
-- Number of synced plans (from log)
-- Number of local plans in ./plans/
+- Number of plans pending rename (default-named)
+- Number of organized plans
 - Number of archived plans
 - Current configuration settings
 
@@ -76,7 +78,7 @@ Provide a summary to the user:
 ```
 /sync-status
 ```
-Shows pending plans, recent syncs, and current config.
+Shows plan counts and current config.
 
 **Verbose mode:**
 ```
@@ -87,26 +89,31 @@ Also includes archived plans and full configuration details.
 ## Output Format
 
 ```
-Plans Bank Sync Status
-======================
+Plans Bank Status
+=================
 
 Configuration:
-  Always-On: true
-  Source: ~/.claude/plans
-  Target: ./plans
+  Hook installed: yes
+  Plans Directory: ./plans
   Auto-Commit: true
   Auto-Archive: enabled (30 days)
 
-Pending Plans (3):
+Pending Rename (2):
   - groovy-gathering-chipmunk.md
   - sweet-berry-wine.md
-  - fluffy-dancing-penguin.md
 
-Recently Synced (5):
-  - feature-add-dark-mode-01.18.26.md (2 hours ago)
-  - bugfix-fix-login-error-01.17.26.md (1 day ago)
-  - feature-api-redesign-01.16.26.md (2 days ago)
+Organized Plans (5):
+  - feature-add-dark-mode-01.18.26.md
+  - bugfix-fix-login-error-01.17.26.md
+  - feature-api-redesign-01.16.26.md
+  - docs-readme-update-01.15.26.md
+  - refactor-cleanup-utils-01.14.26.md
 
-Local Plans (./plans/): 12 files
 Archived: 3 files
+
+Summary:
+  Total in ./plans/: 7 plans
+  Pending rename: 2
+  Organized: 5
+  Archived: 3
 ```

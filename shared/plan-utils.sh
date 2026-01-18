@@ -28,12 +28,14 @@ sanitize_name() {
 
 # Generate dated filename with duplicate handling
 # Usage: generate_filename "my-feature" "/path/to/plans"
-# Output: feature-my-feature-01.18.26.md (or with -2, -3 suffix if exists)
+# Output: feature-my-feature-01.18.26-1430.md (with Central timezone time)
 generate_filename() {
     local name="$1"
     local target_dir="$2"
-    local date=$(date +"%m.%d.%y")
-    local base="feature-${name}-${date}"
+    # Use Central timezone for date and time
+    local date=$(TZ='America/Chicago' date +"%m.%d.%y")
+    local time=$(TZ='America/Chicago' date +"%H%M")
+    local base="feature-${name}-${date}-${time}"
     local filename="${base}.md"
     local counter=2
 
@@ -57,12 +59,13 @@ is_default_name() {
 }
 
 # Check if filename is already in our format
-# Usage: is_organized_name "feature-my-plan-01.18.26.md"
+# Usage: is_organized_name "feature-my-plan-01.18.26-1430.md"
 # Returns: 0 if matches our format, 1 otherwise
 is_organized_name() {
     local filename="$1"
-    # Our format: feature-{name}-{MM.DD.YY}.md or feature-{name}-{MM.DD.YY}-{N}.md
-    [[ "$filename" =~ ^feature-.*-[0-9]{2}\.[0-9]{2}\.[0-9]{2}(-[0-9]+)?\.md$ ]]
+    # Our format: feature-{name}-{MM.DD.YY}-{HHMM}.md or with duplicate suffix
+    # Also matches old format without time for backwards compatibility
+    [[ "$filename" =~ ^feature-.*-[0-9]{2}\.[0-9]{2}\.[0-9]{2}(-[0-9]{4})?(-[0-9]+)?\.md$ ]]
 }
 
 # Git commit helper for plan files
@@ -187,7 +190,7 @@ list_plans_in_dir() {
     local count=0
     while IFS= read -r file; do
         [[ -z "$file" ]] && continue
-        ((count++))
+        count=$((count + 1))
         local filename=$(basename "$file")
         local size=$(get_file_size "$file")
         local rel_time=$(get_relative_time "$file")
@@ -253,89 +256,6 @@ get_file_age_days() {
     echo $((diff / 86400))
 }
 
-# =============================================================================
-# Sync Tracking Functions (Option D: Always-On)
-# =============================================================================
-
-# Default paths for sync tracking
-PLANS_BANK_PROCESSED_LOG="${PLANS_BANK_PROCESSED_LOG:-$HOME/.claude/.plans-bank-processed}"
-PLANS_BANK_CONFIG="${PLANS_BANK_CONFIG:-$HOME/.claude/plans-bank-config.json}"
-
-# Get MD5 hash of file content
-# Usage: get_content_hash "/path/to/file.md"
-# Output: md5 hash string
-get_content_hash() {
-    local file="$1"
-    if [[ ! -f "$file" ]]; then
-        echo ""
-        return 1
-    fi
-
-    # Try md5sum (Linux) first, then md5 (macOS)
-    if command -v md5sum &> /dev/null; then
-        md5sum "$file" 2>/dev/null | cut -d' ' -f1
-    elif command -v md5 &> /dev/null; then
-        md5 -q "$file" 2>/dev/null
-    else
-        # Fallback: use cksum if neither available
-        cksum "$file" 2>/dev/null | cut -d' ' -f1
-    fi
-}
-
-# Check if file has already been processed (synced)
-# Usage: is_file_processed "/path/to/source.md"
-# Returns: 0 if already processed, 1 if not
-is_file_processed() {
-    local file="$1"
-    local hash=$(get_content_hash "$file")
-
-    if [[ -z "$hash" ]]; then
-        return 1
-    fi
-
-    # Check if hash exists in processed log
-    if [[ -f "$PLANS_BANK_PROCESSED_LOG" ]]; then
-        grep -q "^${hash}|" "$PLANS_BANK_PROCESSED_LOG" 2>/dev/null
-        return $?
-    fi
-
-    return 1
-}
-
-# Mark a file as processed in the log
-# Usage: mark_file_processed "/path/to/source.md" "/path/to/target.md"
-mark_file_processed() {
-    local source_file="$1"
-    local target_path="$2"
-    local hash=$(get_content_hash "$source_file")
-    local timestamp=$(date +"%Y-%m-%d %H:%M:%S")
-
-    if [[ -z "$hash" ]]; then
-        return 1
-    fi
-
-    # Create log directory if needed
-    mkdir -p "$(dirname "$PLANS_BANK_PROCESSED_LOG")"
-
-    # Append to processed log
-    echo "${hash}|${target_path}|${timestamp}" >> "$PLANS_BANK_PROCESSED_LOG"
-}
-
-# Find existing organized copy by content hash
-# Usage: find_organized_copy "/path/to/source.md"
-# Output: path to existing copy if found, empty otherwise
-find_organized_copy() {
-    local file="$1"
-    local hash=$(get_content_hash "$file")
-
-    if [[ -z "$hash" || ! -f "$PLANS_BANK_PROCESSED_LOG" ]]; then
-        echo ""
-        return 1
-    fi
-
-    # Find the target path for this hash
-    grep "^${hash}|" "$PLANS_BANK_PROCESSED_LOG" 2>/dev/null | tail -1 | cut -d'|' -f2
-}
 
 # Detect category from plan header keywords
 # Usage: detect_category "# Fix authentication bug"
@@ -374,13 +294,15 @@ detect_category() {
 
 # Generate filename with category prefix
 # Usage: generate_categorized_filename "my-feature" "/path/to/plans" "bugfix"
-# Output: bugfix-my-feature-01.18.26.md (or with -2, -3 suffix if exists)
+# Output: bugfix-my-feature-01.18.26-1430.md (with Central timezone time)
 generate_categorized_filename() {
     local name="$1"
     local target_dir="$2"
     local category="${3:-feature}"
-    local date=$(date +"%m.%d.%y")
-    local base="${category}-${name}-${date}"
+    # Use Central timezone for date and time
+    local date=$(TZ='America/Chicago' date +"%m.%d.%y")
+    local time=$(TZ='America/Chicago' date +"%H%M")
+    local base="${category}-${name}-${date}-${time}"
     local filename="${base}.md"
     local counter=2
 
@@ -394,12 +316,13 @@ generate_categorized_filename() {
 }
 
 # Check if filename matches any organized pattern (feature-, bugfix-, refactor-, docs-, test-)
-# Usage: is_any_organized_name "bugfix-my-plan-01.18.26.md"
+# Usage: is_any_organized_name "bugfix-my-plan-01.18.26-1430.md"
 # Returns: 0 if matches organized format, 1 otherwise
 is_any_organized_name() {
     local filename="$1"
-    # Match: (feature|bugfix|refactor|docs|test)-{name}-{MM.DD.YY}[-N].md
-    [[ "$filename" =~ ^(feature|bugfix|refactor|docs|test)-.*-[0-9]{2}\.[0-9]{2}\.[0-9]{2}(-[0-9]+)?\.md$ ]]
+    # Match: (category)-{name}-{MM.DD.YY}-{HHMM}[-N].md
+    # Also matches old format without time for backwards compatibility
+    [[ "$filename" =~ ^(feature|bugfix|refactor|docs|test)-.*-[0-9]{2}\.[0-9]{2}\.[0-9]{2}(-[0-9]{4})?(-[0-9]+)?\.md$ ]]
 }
 
 # Archive plans older than N days
@@ -426,131 +349,10 @@ archive_old_plans() {
         if [[ "$age" -gt "$older_than_days" ]]; then
             local filename=$(basename "$file")
             mv "$file" "${archive_dir}/${filename}"
-            ((count++))
+            count=$((count + 1))
         fi
     done
 
     echo "$count"
 }
 
-# Get sync status counts
-# Usage: get_sync_status "/path/to/global/plans" "/path/to/local/plans"
-# Output: JSON-like string with counts
-get_sync_status() {
-    local global_dir="${1:-$HOME/.claude/plans}"
-    local local_dir="${2:-./plans}"
-
-    local pending=0
-    local synced=0
-    local archived=0
-
-    # Count pending (unprocessed) files in global dir
-    if [[ -d "$global_dir" ]]; then
-        for file in "$global_dir"/*.md; do
-            [[ -e "$file" ]] || continue
-            local filename=$(basename "$file")
-
-            # Skip if already organized
-            if is_any_organized_name "$filename"; then
-                continue
-            fi
-
-            # Check if processed
-            if is_file_processed "$file"; then
-                ((synced++))
-            else
-                ((pending++))
-            fi
-        done
-    fi
-
-    # Count synced files based on processed log
-    if [[ -f "$PLANS_BANK_PROCESSED_LOG" ]]; then
-        synced=$(wc -l < "$PLANS_BANK_PROCESSED_LOG" | tr -d ' ')
-    fi
-
-    # Count archived files
-    if [[ -d "${local_dir}/archive" ]]; then
-        archived=$(find "${local_dir}/archive" -maxdepth 1 -name "*.md" -type f 2>/dev/null | wc -l | tr -d ' ')
-    fi
-
-    echo "pending:${pending}|synced:${synced}|archived:${archived}"
-}
-
-# Load configuration value from plans-bank-config.json
-# Usage: get_config_value "alwaysOn" "true"
-# Output: config value or default
-get_config_value() {
-    local key="$1"
-    local default="$2"
-
-    if [[ ! -f "$PLANS_BANK_CONFIG" ]]; then
-        echo "$default"
-        return
-    fi
-
-    # Try to use jq if available
-    if command -v jq &> /dev/null; then
-        local value=$(jq -r ".${key} // empty" "$PLANS_BANK_CONFIG" 2>/dev/null)
-        if [[ -n "$value" && "$value" != "null" ]]; then
-            echo "$value"
-        else
-            echo "$default"
-        fi
-    else
-        # Fallback: basic grep for simple values
-        local value=$(grep "\"${key}\"" "$PLANS_BANK_CONFIG" 2>/dev/null | head -1 | sed 's/.*: *"\?\([^",}]*\)"\?.*/\1/')
-        if [[ -n "$value" ]]; then
-            echo "$value"
-        else
-            echo "$default"
-        fi
-    fi
-}
-
-# Copy and rename a plan file (for sync operations)
-# Usage: copy_and_rename_plan "/source/plan.md" "/target/dir" ["custom-name"] ["category"]
-copy_and_rename_plan() {
-    local source="$1"
-    local target_dir="$2"
-    local custom_name="$3"
-    local category="$4"
-
-    if [[ ! -f "$source" ]]; then
-        echo "Source file not found: $source"
-        return 1
-    fi
-
-    # Create target directory if needed
-    mkdir -p "$target_dir"
-
-    # Determine the name to use
-    local name
-    local header=""
-    if [[ -n "$custom_name" ]]; then
-        name=$(sanitize_name "$custom_name")
-    else
-        header=$(extract_plan_name "$source")
-        if [[ -z "$header" ]]; then
-            header="untitled-plan"
-        fi
-        name=$(sanitize_name "$header")
-    fi
-
-    # Auto-detect category if not provided
-    if [[ -z "$category" ]]; then
-        category=$(detect_category "$header")
-    fi
-
-    # Generate unique filename with category
-    local filename=$(generate_categorized_filename "$name" "$target_dir" "$category")
-    local target="${target_dir}/${filename}"
-
-    # Copy the file
-    cp "$source" "$target"
-
-    # Mark as processed
-    mark_file_processed "$source" "$target"
-
-    echo "$target"
-}

@@ -89,19 +89,6 @@ merge_settings_with_jq() {
         fi
     fi
 
-    # Add plans-bank-sync.sh SessionStart hook (Option D)
-    if ! jq -e '.hooks.SessionStart[].hooks[] | select(.command | contains("plans-bank-sync.sh"))' "$SETTINGS_FILE" > /dev/null 2>&1; then
-        if jq -e '.hooks.SessionStart' "$SETTINGS_FILE" > /dev/null 2>&1; then
-            jq '.hooks.SessionStart[0].hooks += [{"type": "command", "command": "~/.claude/hooks/plans-bank-sync.sh session-start"}]' "$SETTINGS_FILE" > "$temp_file"
-            mv "$temp_file" "$SETTINGS_FILE"
-            modified=true
-        elif jq -e '.hooks' "$SETTINGS_FILE" > /dev/null 2>&1; then
-            jq '.hooks.SessionStart = [{"matcher": "*", "hooks": [{"type": "command", "command": "~/.claude/hooks/plans-bank-sync.sh session-start"}]}]' "$SETTINGS_FILE" > "$temp_file"
-            mv "$temp_file" "$SETTINGS_FILE"
-            modified=true
-        fi
-    fi
-
     # Add plans-bank-sync.sh Stop hook (Option D)
     if ! jq -e '.hooks.Stop[].hooks[] | select(.command | contains("plans-bank-sync.sh"))' "$SETTINGS_FILE" > /dev/null 2>&1; then
         if jq -e '.hooks.Stop' "$SETTINGS_FILE" > /dev/null 2>&1; then
@@ -123,10 +110,6 @@ show_manual_settings_instructions() {
     echo "Add these hook configurations to your ~/.claude/settings.json:"
     echo ""
     echo '  "hooks": {'
-    echo '    "SessionStart": [{'
-    echo '      "matcher": "*",'
-    echo '      "hooks": [{"type": "command", "command": "~/.claude/hooks/plans-bank-sync.sh session-start"}]'
-    echo '    }],'
     echo '    "Stop": [{'
     echo '      "matcher": "*",'
     echo '      "hooks": ['
@@ -144,17 +127,6 @@ create_new_settings() {
 {
   "plansDirectory": "./plans",
   "hooks": {
-    "SessionStart": [
-      {
-        "matcher": "*",
-        "hooks": [
-          {
-            "type": "command",
-            "command": "~/.claude/hooks/plans-bank-sync.sh session-start"
-          }
-        ]
-      }
-    ],
     "Stop": [
       {
         "matcher": "*",
@@ -254,15 +226,15 @@ install() {
     echo "What's installed:"
     echo "  - Slash commands: /save-plan, /list-plans, /search-plans, /archive-plan, /sync-status"
     echo "  - Option B hook: Renames files in ./plans/ on session stop"
-    echo "  - Option D hook: Syncs plans from ~/.claude/plans/ to ./plans/"
+    echo "  - Option D hook: Auto-renames plans with default names in ./plans/"
     echo "  - Shared utilities: plan-utils.sh"
     echo "  - Configuration: $CONFIG_FILE"
     echo ""
     echo "Features:"
-    echo "  - Auto-sync: Plans automatically copied from ~/.claude/plans/ to ./plans/"
+    echo "  - Auto-rename: Plans with default names (word-word-word.md) get descriptive names"
     echo "  - Auto-categorize: bugfix-, refactor-, docs-, test-, or feature- prefix"
     echo "  - Auto-archive: Plans older than 30 days moved to ./plans/archive/"
-    echo "  - Auto-commit: Each synced plan committed to git"
+    echo "  - Auto-commit: Each renamed plan committed to git"
     echo ""
     echo "Usage:"
     echo "  /save-plan              # Save current plan with extracted name"

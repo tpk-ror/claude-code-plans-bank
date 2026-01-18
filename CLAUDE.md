@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-This repository provides tools to rename Claude Code plan files from auto-generated names (e.g., `groovy-gathering-chipmunk.md`) to descriptive, date-stamped names (e.g., `feature-add-user-auth-01.18.26.md`).
+This repository provides tools to rename Claude Code plan files from auto-generated names (e.g., `groovy-gathering-chipmunk.md`) to descriptive, date-and-time-stamped names (e.g., `feature-add-user-auth-01.18.26-1430.md`). Time is in Central timezone (America/Chicago).
 
 Three installation options are available:
 - **Option A (Slash Command)**: Manual `/save-plan` command for on-demand use
@@ -32,15 +32,18 @@ quick-install.sh                     # One-liner installer for Option C (curl | 
 
 - `extract_plan_name`: Gets first `# Header` from markdown file
 - `sanitize_name`: Converts to lowercase, replaces non-alphanumeric with hyphens
-- `generate_filename`: Creates `feature-{name}-{MM.DD.YY}.md` with duplicate suffix handling
+- `generate_filename`: Creates `feature-{name}-{MM.DD.YY}-{HHMM}.md` with duplicate suffix handling
+- `generate_categorized_filename`: Creates `{category}-{name}-{MM.DD.YY}-{HHMM}.md`
 - `is_default_name`: Detects Claude's `word-word-word.md` pattern
-- `is_organized_name`: Detects our `feature-*-MM.DD.YY.md` pattern
+- `is_organized_name`: Detects our organized pattern with date and time
+- `detect_category`: Auto-detects category (bugfix, refactor, docs, test, feature) from header
 
 ## Naming Convention
 
-Output format: `feature-{sanitized-name}-{MM.DD.YY}.md`
+Output format: `{category}-{sanitized-name}-{MM.DD.YY}-{HHMM}.md`
 
-Duplicates get numeric suffix: `-2`, `-3`, etc.
+- Time is in Central timezone (America/Chicago) in 24-hour format
+- Duplicates get numeric suffix: `-2`, `-3`, etc.
 
 ## Testing Changes
 

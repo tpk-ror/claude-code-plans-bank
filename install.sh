@@ -216,26 +216,8 @@ install_plugin() {
 configure_always_on_hooks() {
     local temp_file=$(mktemp)
 
-    # Define our hooks
-    local session_start_hook='{"type": "command", "command": "~/.claude/hooks/plans-bank-sync.sh session-start"}'
+    # Define our hook
     local stop_hook='{"type": "command", "command": "~/.claude/hooks/plans-bank-sync.sh stop"}'
-
-    # Check if we need to add SessionStart hook
-    if ! jq -e '.hooks.SessionStart[].hooks[] | select(.command | contains("plans-bank-sync.sh"))' "$SETTINGS_FILE" > /dev/null 2>&1; then
-        if jq -e '.hooks.SessionStart' "$SETTINGS_FILE" > /dev/null 2>&1; then
-            # SessionStart exists, add our hook
-            jq ".hooks.SessionStart[0].hooks += [$session_start_hook]" "$SETTINGS_FILE" > "$temp_file"
-            mv "$temp_file" "$SETTINGS_FILE"
-        elif jq -e '.hooks' "$SETTINGS_FILE" > /dev/null 2>&1; then
-            # hooks exists but no SessionStart
-            jq ".hooks.SessionStart = [{\"matcher\": \"*\", \"hooks\": [$session_start_hook]}]" "$SETTINGS_FILE" > "$temp_file"
-            mv "$temp_file" "$SETTINGS_FILE"
-        else
-            # No hooks at all
-            jq ". + {\"hooks\": {\"SessionStart\": [{\"matcher\": \"*\", \"hooks\": [$session_start_hook]}]}}" "$SETTINGS_FILE" > "$temp_file"
-            mv "$temp_file" "$SETTINGS_FILE"
-        fi
-    fi
 
     # Check if we need to add Stop hook
     if ! jq -e '.hooks.Stop[].hooks[] | select(.command | contains("plans-bank-sync.sh"))' "$SETTINGS_FILE" > /dev/null 2>&1; then
@@ -246,6 +228,10 @@ configure_always_on_hooks() {
         elif jq -e '.hooks' "$SETTINGS_FILE" > /dev/null 2>&1; then
             # hooks exists but no Stop
             jq ".hooks.Stop = [{\"matcher\": \"*\", \"hooks\": [$stop_hook]}]" "$SETTINGS_FILE" > "$temp_file"
+            mv "$temp_file" "$SETTINGS_FILE"
+        else
+            # No hooks at all
+            jq ". + {\"hooks\": {\"Stop\": [{\"matcher\": \"*\", \"hooks\": [$stop_hook]}]}}" "$SETTINGS_FILE" > "$temp_file"
             mv "$temp_file" "$SETTINGS_FILE"
         fi
     fi
@@ -304,13 +290,9 @@ install_always_on() {
         # Existing settings without jq
         print_warning "  Existing settings.json found, but jq not available for auto-merge"
         echo ""
-        echo "Add these hooks to your ~/.claude/settings.json:"
+        echo "Add this hook to your ~/.claude/settings.json:"
         echo ""
         echo '  "hooks": {'
-        echo '    "SessionStart": [{'
-        echo '      "matcher": "*",'
-        echo '      "hooks": [{"type": "command", "command": "~/.claude/hooks/plans-bank-sync.sh session-start"}]'
-        echo '    }],'
         echo '    "Stop": [{'
         echo '      "matcher": "*",'
         echo '      "hooks": [{"type": "command", "command": "~/.claude/hooks/plans-bank-sync.sh stop"}]'
@@ -324,10 +306,9 @@ install_always_on() {
     print_success "Always-On Auto-Save installed!"
     echo ""
     echo "What happens now:"
-    echo "  - Plans are automatically synced from ~/.claude/plans/ to ./plans/"
-    echo "  - SessionStart hook: Syncs plans when Claude Code starts"
-    echo "  - Stop hook: Syncs plans when Claude Code stops"
-    echo "  - Use /sync-status to check sync status"
+    echo "  - Plans in ./plans/ with default names (word-word-word.md) are auto-renamed"
+    echo "  - Stop hook: Renames plans when Claude Code stops"
+    echo "  - Use /sync-status to check status"
     echo ""
     echo "Configuration: $CONFIG_FILE"
 }
@@ -429,8 +410,8 @@ main() {
     echo "     - Auto-merges settings.json if jq is available"
     echo ""
     echo -e "  ${GREEN}4) Always-On Auto-Save (Option D) - RECOMMENDED${NC}"
-    echo "     - Syncs plans from ~/.claude/plans/ to ./plans/"
-    echo "     - Hooks: SessionStart + Stop"
+    echo "     - Auto-renames plans in ./plans/ from default names"
+    echo "     - Hook runs on session Stop"
     echo "     - Auto-categorizes: bugfix, refactor, docs, test, feature"
     echo "     - Includes /sync-status command"
     echo ""
@@ -478,11 +459,11 @@ main() {
     echo ""
     echo "Next steps:"
     echo "  1. Create a plan in Claude Code (use plan mode)"
-    echo "  2. Run /save-plan to organize it (Options A/C)"
-    echo "     OR let it auto-sync from ~/.claude/plans/ (Option D)"
-    echo "     OR let it auto-organize on session stop (Option B)"
-    echo "  3. Find your plans in ./plans/ with descriptive names"
-    echo "  4. Use /sync-status to check sync status (Option D)"
+    echo "  2. Plans are saved to ./plans/ with default names"
+    echo "  3. Run /save-plan to rename manually (Options A/C)"
+    echo "     OR let it auto-rename on session stop (Options B/D)"
+    echo "  4. Find your plans in ./plans/ with descriptive names"
+    echo "  5. Use /sync-status to check status"
     echo ""
 }
 

@@ -1,10 +1,10 @@
 ---
-description: Search plan contents by keyword across global and project directories
+description: Search plan contents by keyword in project directory
 allowed-tools: Bash, Read
-argument-hint: <search-term> [--case-sensitive] [--global | --local]
+argument-hint: <search-term> [--case-sensitive] [--archived]
 ---
 
-Search for a keyword or phrase in all plan files from `~/.claude/plans/` (global) and `./plans/` (project-local).
+Search for a keyword or phrase in all plan files in `./plans/` (project-local).
 
 ## Instructions
 
@@ -14,13 +14,11 @@ Follow these steps to search plans:
 
 The first non-flag argument is the search term (required). Additional flags:
 - `--case-sensitive` - Match case exactly (default is case-insensitive)
-- `--global` - Only search `~/.claude/plans/`
-- `--local` - Only search `./plans/`
-- (no location flag) - Search both locations
+- `--archived` - Also search `./plans/archive/`
 
 If no search term is provided, show usage and exit:
 ```
-Usage: /search-plans <search-term> [--case-sensitive] [--global | --local]
+Usage: /search-plans <search-term> [--case-sensitive] [--archived]
 ```
 
 ### Step 2: Set up search parameters
@@ -32,27 +30,25 @@ GREP_FLAGS="-rn -i"
 # If --case-sensitive flag provided
 # GREP_FLAGS="-rn"
 
-GLOBAL_DIR="$HOME/.claude/plans"
 LOCAL_DIR="./plans"
+ARCHIVE_DIR="./plans/archive"
 ```
 
-### Step 3: Search Global Plans
-
-If searching global plans:
-
-```bash
-if [[ -d "$GLOBAL_DIR" ]]; then
-    grep $GREP_FLAGS "$SEARCH_TERM" "$GLOBAL_DIR"/*.md 2>/dev/null
-fi
-```
-
-### Step 4: Search Project Plans
-
-If searching local plans:
+### Step 3: Search Project Plans
 
 ```bash
 if [[ -d "$LOCAL_DIR" ]]; then
     grep $GREP_FLAGS "$SEARCH_TERM" "$LOCAL_DIR"/*.md 2>/dev/null
+fi
+```
+
+### Step 4: Search Archived Plans (if --archived)
+
+If `--archived` flag is provided:
+
+```bash
+if [[ -d "$ARCHIVE_DIR" ]]; then
+    grep $GREP_FLAGS "$SEARCH_TERM" "$ARCHIVE_DIR"/*.md 2>/dev/null
 fi
 ```
 
@@ -63,12 +59,12 @@ Group results by file and show line numbers with context:
 ```
 Found 3 matches in 2 plans:
 
-~/.claude/plans/sleepy-shimmying-moler.md:
-  Line 45: "...implement authentication flow..."
-  Line 78: "...authentication tokens should..."
-
 ./plans/feature-auth-01.18.26.md:
   Line 12: "...OAuth authentication provider..."
+  Line 45: "...authentication tokens should..."
+
+./plans/bugfix-login-01.17.26.md:
+  Line 8: "...fix authentication flow..."
 ```
 
 If no matches found:
@@ -114,14 +110,9 @@ Found N matches in M plans.
 /search-plans "user login"
 ```
 
-**Search only global plans:**
+**Search including archived plans:**
 ```
-/search-plans database --global
-```
-
-**Search only project plans:**
-```
-/search-plans refactor --local
+/search-plans database --archived
 ```
 
 ## Expected Output
@@ -129,12 +120,12 @@ Found N matches in M plans.
 ```
 Found 3 matches in 2 plans:
 
-~/.claude/plans/sleepy-shimmying-moler.md:
-  Line 45: "...implement authentication flow using JWT tokens..."
-  Line 78: "...authentication tokens should expire after 24h..."
-
 ./plans/feature-auth-01.18.26.md:
   Line 12: "...integrate OAuth authentication provider for SSO..."
+  Line 45: "...authentication tokens should expire after 24h..."
+
+./plans/bugfix-login-01.17.26.md:
+  Line 8: "...fix authentication flow for edge cases..."
 
 Total: 3 matches in 2 files
 ```
@@ -144,12 +135,11 @@ Total: 3 matches in 2 files
 If no search term provided:
 ```
 Error: Search term required.
-Usage: /search-plans <search-term> [--case-sensitive] [--global | --local]
+Usage: /search-plans <search-term> [--case-sensitive] [--archived]
 ```
 
-If neither directory exists:
+If plans directory doesn't exist:
 ```
-No plan directories found. Expected:
-  - ~/.claude/plans/ (global)
-  - ./plans/ (project-local)
+No plan directory found. Expected: ./plans/
+Run /save-plan first to create a plan.
 ```

@@ -1,12 +1,11 @@
 #!/bin/bash
-# plans-bank-sync.sh - Always-on sync for Claude Code plans
-# Copies plans from ~/.claude/plans/ to ./plans/ with proper naming
+# plans-bank-sync.sh - Auto-rename plans in ./plans/ directory
+# Renames files with default names (word-word-word.md) to descriptive format
 #
 # Usage:
-#   plans-bank-sync.sh [session-start|stop]
+#   plans-bank-sync.sh [sync|stop|status]
 #
 # Hooks:
-#   SessionStart - Catch up on plans created while offline
 #   Stop - Process plans after each session
 
 # Exit silently on any error (hooks should be non-disruptive)
@@ -15,12 +14,9 @@ set -e
 # Configuration paths
 CLAUDE_DIR="$HOME/.claude"
 PLANS_BANK_CONFIG="${PLANS_BANK_CONFIG:-$CLAUDE_DIR/plans-bank-config.json}"
-PLANS_BANK_PROCESSED_LOG="${PLANS_BANK_PROCESSED_LOG:-$CLAUDE_DIR/.plans-bank-processed}"
 
 # Default configuration values
-DEFAULT_SOURCE_DIR="$CLAUDE_DIR/plans"
 DEFAULT_TARGET_DIR="./plans"
-DEFAULT_NAMING_PREFIX="feature"
 DEFAULT_AUTO_COMMIT="true"
 DEFAULT_AUTO_ARCHIVE_ENABLED="true"
 DEFAULT_AUTO_ARCHIVE_DAYS="30"
@@ -65,33 +61,8 @@ if [[ "$UTILS_LOADED" = false ]]; then
 
     is_any_organized_name() {
         local filename="$1"
-        [[ "$filename" =~ ^(feature|bugfix|refactor|docs|test)-.*-[0-9]{2}\.[0-9]{2}\.[0-9]{2}(-[0-9]+)?\.md$ ]]
-    }
-
-    get_content_hash() {
-        local file="$1"
-        if command -v md5sum &> /dev/null; then
-            md5sum "$file" 2>/dev/null | cut -d' ' -f1
-        elif command -v md5 &> /dev/null; then
-            md5 -q "$file" 2>/dev/null
-        else
-            cksum "$file" 2>/dev/null | cut -d' ' -f1
-        fi
-    }
-
-    is_file_processed() {
-        local file="$1"
-        local hash=$(get_content_hash "$file")
-        [[ -n "$hash" && -f "$PLANS_BANK_PROCESSED_LOG" ]] && grep -q "^${hash}|" "$PLANS_BANK_PROCESSED_LOG" 2>/dev/null
-    }
-
-    mark_file_processed() {
-        local source_file="$1"
-        local target_path="$2"
-        local hash=$(get_content_hash "$source_file")
-        local timestamp=$(date +"%Y-%m-%d %H:%M:%S")
-        mkdir -p "$(dirname "$PLANS_BANK_PROCESSED_LOG")"
-        echo "${hash}|${target_path}|${timestamp}" >> "$PLANS_BANK_PROCESSED_LOG"
+        # Match with optional time (HHMM) and optional duplicate suffix
+        [[ "$filename" =~ ^(feature|bugfix|refactor|docs|test)-.*-[0-9]{2}\.[0-9]{2}\.[0-9]{2}(-[0-9]{4})?(-[0-9]+)?\.md$ ]]
     }
 
     detect_category() {
@@ -115,8 +86,10 @@ if [[ "$UTILS_LOADED" = false ]]; then
         local name="$1"
         local target_dir="$2"
         local category="${3:-feature}"
-        local date=$(date +"%m.%d.%y")
-        local base="${category}-${name}-${date}"
+        # Use Central timezone for date and time
+        local date=$(TZ='America/Chicago' date +"%m.%d.%y")
+        local time=$(TZ='America/Chicago' date +"%H%M")
+        local base="${category}-${name}-${date}-${time}"
         local filename="${base}.md"
         local counter=2
 
@@ -150,7 +123,7 @@ if [[ "$UTILS_LOADED" = false ]]; then
             local age=$(get_file_age_days "$file")
             if [[ "$age" -gt "$older_than_days" ]]; then
                 mv "$file" "${archive_dir}/$(basename "$file")"
-                ((count++))
+                count=$((count + 1))
             fi
         done
 
@@ -160,9 +133,7 @@ fi
 
 # Load configuration with defaults
 load_config() {
-    SOURCE_DIR="$DEFAULT_SOURCE_DIR"
     TARGET_DIR="$DEFAULT_TARGET_DIR"
-    NAMING_PREFIX="$DEFAULT_NAMING_PREFIX"
     AUTO_COMMIT="$DEFAULT_AUTO_COMMIT"
     AUTO_ARCHIVE_ENABLED="$DEFAULT_AUTO_ARCHIVE_ENABLED"
     AUTO_ARCHIVE_DAYS="$DEFAULT_AUTO_ARCHIVE_DAYS"
@@ -170,15 +141,12 @@ load_config() {
 
     if [[ -f "$PLANS_BANK_CONFIG" ]] && command -v jq &> /dev/null; then
         ALWAYS_ON=$(jq -r '.alwaysOn // true' "$PLANS_BANK_CONFIG" 2>/dev/null)
-        SOURCE_DIR=$(jq -r '.sourceDirectory // "~/.claude/plans"' "$PLANS_BANK_CONFIG" 2>/dev/null)
         TARGET_DIR=$(jq -r '.targetDirectory // "./plans"' "$PLANS_BANK_CONFIG" 2>/dev/null)
-        NAMING_PREFIX=$(jq -r '.namingPrefix // "feature"' "$PLANS_BANK_CONFIG" 2>/dev/null)
         AUTO_COMMIT=$(jq -r '.autoCommit // true' "$PLANS_BANK_CONFIG" 2>/dev/null)
         AUTO_ARCHIVE_ENABLED=$(jq -r '.autoArchive.enabled // true' "$PLANS_BANK_CONFIG" 2>/dev/null)
         AUTO_ARCHIVE_DAYS=$(jq -r '.autoArchive.olderThanDays // 30' "$PLANS_BANK_CONFIG" 2>/dev/null)
 
         # Expand ~ in paths
-        SOURCE_DIR="${SOURCE_DIR/#\~/$HOME}"
         TARGET_DIR="${TARGET_DIR/#\~/$HOME}"
     elif [[ -f "$PLANS_BANK_CONFIG" ]]; then
         # Basic parsing without jq
@@ -200,10 +168,10 @@ git_commit_plan() {
     git commit -m "Add plan: ${name}" 2>/dev/null || true
 }
 
-# Main sync logic
-sync_plans() {
+# Main rename logic - operates only on ./plans/
+rename_plans() {
     local hook_type="${1:-sync}"
-    local synced_count=0
+    local renamed_count=0
 
     # Load configuration
     load_config
@@ -213,16 +181,13 @@ sync_plans() {
         exit 0
     fi
 
-    # Check if source directory exists
-    if [[ ! -d "$SOURCE_DIR" ]]; then
+    # Check if target directory exists
+    if [[ ! -d "$TARGET_DIR" ]]; then
         exit 0
     fi
 
-    # Create target directory
-    mkdir -p "$TARGET_DIR"
-
-    # Process each .md file in source directory
-    for file in "$SOURCE_DIR"/*.md; do
+    # Process each .md file in ./plans/ directory
+    for file in "$TARGET_DIR"/*.md; do
         # Skip if no files match
         [[ -e "$file" ]] || continue
 
@@ -233,8 +198,8 @@ sync_plans() {
             continue
         fi
 
-        # Skip if already processed (check by content hash)
-        if is_file_processed "$file"; then
+        # Only process files with default naming pattern (word-word-word.md)
+        if ! is_default_name "$filename"; then
             continue
         fi
 
@@ -252,20 +217,17 @@ sync_plans() {
 
         # Generate new filename with category prefix
         local new_filename=$(generate_categorized_filename "$sanitized" "$TARGET_DIR" "$category")
-        local target_path="${TARGET_DIR}/${new_filename}"
+        local new_path="${TARGET_DIR}/${new_filename}"
 
-        # Copy the file to target
-        cp "$file" "$target_path"
-
-        # Mark as processed
-        mark_file_processed "$file" "$target_path"
+        # Rename the file in place
+        mv "$file" "$new_path"
 
         # Auto-commit if enabled
         if [[ "$AUTO_COMMIT" == "true" ]]; then
-            git_commit_plan "$target_path"
+            git_commit_plan "$new_path"
         fi
 
-        ((synced_count++))
+        renamed_count=$((renamed_count + 1))
     done
 
     # Run auto-archive if enabled
@@ -277,44 +239,37 @@ sync_plans() {
     exit 0
 }
 
-# Show sync status (for debugging/manual use)
+# Show status (for debugging/manual use)
 show_status() {
     load_config
 
-    echo "Plans Bank Sync Status"
-    echo "======================"
+    echo "Plans Bank Status"
+    echo "================="
     echo ""
     echo "Configuration:"
     echo "  Always-On: $ALWAYS_ON"
-    echo "  Source: $SOURCE_DIR"
-    echo "  Target: $TARGET_DIR"
+    echo "  Plans Directory: $TARGET_DIR"
     echo "  Auto-Commit: $AUTO_COMMIT"
     echo "  Auto-Archive: $AUTO_ARCHIVE_ENABLED (after $AUTO_ARCHIVE_DAYS days)"
     echo ""
 
-    # Count files
-    local pending=0
+    # Count files in ./plans/
+    local default_count=0
+    local organized_count=0
     local total=0
 
-    if [[ -d "$SOURCE_DIR" ]]; then
-        for file in "$SOURCE_DIR"/*.md; do
+    if [[ -d "$TARGET_DIR" ]]; then
+        for file in "$TARGET_DIR"/*.md; do
             [[ -e "$file" ]] || continue
             ((total++))
 
             local filename=$(basename "$file")
             if is_any_organized_name "$filename"; then
-                continue
-            fi
-
-            if ! is_file_processed "$file"; then
-                ((pending++))
+                ((organized_count++))
+            elif is_default_name "$filename"; then
+                ((default_count++))
             fi
         done
-    fi
-
-    local synced=0
-    if [[ -f "$PLANS_BANK_PROCESSED_LOG" ]]; then
-        synced=$(wc -l < "$PLANS_BANK_PROCESSED_LOG" | tr -d ' ')
     fi
 
     local archived=0
@@ -323,10 +278,10 @@ show_status() {
     fi
 
     echo "Status:"
-    echo "  Pending (unsynced): $pending"
-    echo "  Total synced: $synced"
+    echo "  Default-named (pending rename): $default_count"
+    echo "  Organized: $organized_count"
     echo "  Archived: $archived"
-    echo "  Total in source: $total"
+    echo "  Total in $TARGET_DIR: $total"
 }
 
 # Main entry point
@@ -335,19 +290,20 @@ main() {
 
     case "$command" in
         session-start|start)
-            sync_plans "session-start"
+            # No-op for session start (no longer syncing from global)
+            exit 0
             ;;
         stop)
-            sync_plans "stop"
+            rename_plans "stop"
             ;;
         sync)
-            sync_plans "sync"
+            rename_plans "sync"
             ;;
         status)
             show_status
             ;;
         *)
-            sync_plans "$command"
+            rename_plans "$command"
             ;;
     esac
 }

@@ -1,17 +1,6 @@
 {
   "plansDirectory": "./plans",
   "hooks": {
-    "SessionStart": [
-      {
-        "matcher": "*",
-        "hooks": [
-          {
-            "type": "command",
-            "command": "~/.claude/hooks/plans-bank-sync.sh session-start"
-          }
-        ]
-      }
-    ],
     "Stop": [
       {
         "matcher": "*",

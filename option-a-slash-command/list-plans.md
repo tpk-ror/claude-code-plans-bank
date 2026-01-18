@@ -1,10 +1,10 @@
 ---
-description: List all plans with metadata from global and project directories
+description: List all plans with metadata from project directory
 allowed-tools: Bash, Read
-argument-hint: [--global | --local]
+argument-hint: [--archived]
 ---
 
-List all plan files from `~/.claude/plans/` (global) and `./plans/` (project-local) with metadata including size, modification date, and first header.
+List all plan files from `./plans/` (project-local) with metadata including size, modification date, and first header.
 
 ## Instructions
 
@@ -13,9 +13,8 @@ Follow these steps to list plans:
 ### Step 1: Parse arguments
 
 Check the provided arguments:
-- `--global` - Only show plans from `~/.claude/plans/`
-- `--local` - Only show plans from `./plans/`
-- (no args) - Show both locations
+- `--archived` - Also show plans from `./plans/archive/`
+- (no args) - Show only active plans in `./plans/`
 
 ### Step 2: Define helper functions
 
@@ -25,16 +24,14 @@ For each plan file, you'll need to extract:
 - Relative modification time (e.g., "today", "yesterday", "3 days ago")
 - First `# ` header line (or "(no header)" if none)
 
-### Step 3: List Global Plans
-
-If showing global plans (`--global` flag or no flags):
+### Step 3: List Project Plans
 
 ```bash
-# Check if global plans directory exists
-GLOBAL_DIR="$HOME/.claude/plans"
-if [[ -d "$GLOBAL_DIR" ]]; then
+# Check if project plans directory exists
+LOCAL_DIR="./plans"
+if [[ -d "$LOCAL_DIR" ]]; then
     # Find .md files, sorted by modification time (newest first)
-    find "$GLOBAL_DIR" -maxdepth 1 -name "*.md" -type f -printf '%T@ %p\n' 2>/dev/null | sort -rn | cut -d' ' -f2-
+    find "$LOCAL_DIR" -maxdepth 1 -name "*.md" -type f -printf '%T@ %p\n' 2>/dev/null | sort -rn | cut -d' ' -f2-
 fi
 ```
 
@@ -44,38 +41,34 @@ For each file found:
 3. Get relative time by comparing file modification time to now
 4. Extract first header with `grep -m1 "^# " "$file" | sed 's/^# //'`
 
-### Step 4: List Project Plans
+### Step 4: List Archived Plans (if --archived)
 
-If showing local plans (`--local` flag or no flags):
+If `--archived` flag is provided:
 
 ```bash
-# Check if project plans directory exists
-LOCAL_DIR="./plans"
-if [[ -d "$LOCAL_DIR" ]]; then
-    find "$LOCAL_DIR" -maxdepth 1 -name "*.md" -type f -printf '%T@ %p\n' 2>/dev/null | sort -rn | cut -d' ' -f2-
+ARCHIVE_DIR="./plans/archive"
+if [[ -d "$ARCHIVE_DIR" ]]; then
+    find "$ARCHIVE_DIR" -maxdepth 1 -name "*.md" -type f -printf '%T@ %p\n' 2>/dev/null | sort -rn | cut -d' ' -f2-
 fi
 ```
 
-Process each file the same way as global plans.
-
 ### Step 5: Format output
 
-Display results grouped by location:
+Display results:
 
 ```
-Global Plans (~/.claude/plans/):
-  1. sleepy-shimmying-moler.md (2.1K, today) - "Feature Ideas for..."
-  2. groovy-gathering-chipmunk.md (1.4K, 3 days ago) - "API Refactor"
-
 Project Plans (./plans/):
   1. feature-auth-system-01.18.26.md (3.2K, yesterday) - "Auth System Design"
+  2. groovy-gathering-chipmunk.md (1.4K, today) - "API Refactor" [pending rename]
 
-Total: 3 plans
+Total: 2 plans
 ```
 
-If a directory doesn't exist or is empty, show:
+Mark files with default naming pattern as `[pending rename]`.
+
+If the directory doesn't exist or is empty, show:
 ```
-Global Plans (~/.claude/plans/):
+Project Plans (./plans/):
   (no plans found)
 ```
 
@@ -104,25 +97,29 @@ days_ago=$(( (now - file_time) / 86400 ))
 /list-plans
 ```
 
-**List only global plans:**
+**List plans including archived:**
 ```
-/list-plans --global
-```
-
-**List only project plans:**
-```
-/list-plans --local
+/list-plans --archived
 ```
 
 ## Expected Output
 
 ```
-Global Plans (~/.claude/plans/):
-  1. sleepy-shimmying-moler.md (2.1K, today) - "Feature Ideas for..."
-  2. groovy-gathering-chipmunk.md (1.4K, 3 days ago) - "API Refactor"
+Project Plans (./plans/):
+  1. feature-auth-system-01.18.26.md (3.2K, yesterday) - "Auth System Design"
+  2. bugfix-fix-login-error-01.17.26.md (1.8K, 2 days ago) - "Fix Login Error"
+  3. groovy-gathering-chipmunk.md (1.4K, today) - "API Refactor" [pending rename]
 
+Total: 3 plans
+```
+
+With `--archived`:
+```
 Project Plans (./plans/):
   1. feature-auth-system-01.18.26.md (3.2K, yesterday) - "Auth System Design"
 
-Total: 3 plans
+Archived Plans (./plans/archive/):
+  1. feature-old-api-12.15.25.md (2.1K, 1 month ago) - "Old API Design"
+
+Total: 2 plans (1 active, 1 archived)
 ```
