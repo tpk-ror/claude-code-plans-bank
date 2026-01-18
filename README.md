@@ -1,4 +1,4 @@
-# Claude Code Plans Bank
+# Claude Code Plan Bank
 
 <p align="center">
   <img src="image.svg" alt="Claude Code Plans Bank" width="800">
