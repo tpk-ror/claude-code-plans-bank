@@ -196,6 +196,20 @@ has_jq() {
     command -v jq &> /dev/null
 }
 
+# Check if Node.js is available (for Option E)
+has_node() {
+    command -v node &> /dev/null
+}
+
+# Check Node.js version
+check_node_version() {
+    if ! has_node; then
+        return 1
+    fi
+    local version=$(node -v | cut -d 'v' -f 2 | cut -d '.' -f 1)
+    [[ "$version" -ge 18 ]]
+}
+
 # Merge hook configuration into existing settings file using jq
 merge_settings_with_jq() {
     local temp_file=$(mktemp)
@@ -441,6 +455,92 @@ EOF
     echo "Configuration: $CONFIG_FILE"
 }
 
+# Install Web UI (Option E)
+install_web_ui() {
+    print_header "Installing Web UI (Option E)..."
+    echo ""
+
+    # Check Node.js requirement
+    if ! has_node; then
+        print_error "Error: Node.js is required for the Web UI."
+        print_warning "Please install Node.js 18+ from https://nodejs.org/"
+        exit 1
+    fi
+
+    if ! check_node_version; then
+        print_warning "Warning: Node.js 18+ is recommended. You have $(node -v)"
+    fi
+
+    # Determine web-ui directory
+    local WEB_UI_DIR="$CLAUDE_DIR/web-ui"
+
+    # Copy web-ui files
+    print_header "Step 1: Copying Web UI files..."
+    mkdir -p "$WEB_UI_DIR"
+    cp -r "$SCRIPT_DIR/option-e-web-ui/"* "$WEB_UI_DIR/"
+    chmod +x "$WEB_UI_DIR/scripts/start.sh"
+    print_success "  Installed: $WEB_UI_DIR/"
+    echo ""
+
+    # Install dependencies
+    print_header "Step 2: Installing npm dependencies..."
+    cd "$WEB_UI_DIR"
+    if npm install --silent; then
+        print_success "  Dependencies installed"
+    else
+        print_error "  Failed to install dependencies"
+        exit 1
+    fi
+    cd - > /dev/null
+    echo ""
+
+    # Install slash command
+    print_header "Step 3: Installing /web-ui command..."
+    mkdir -p "$COMMANDS_DIR"
+    cp "$SCRIPT_DIR/option-e-web-ui/commands/web-ui.md" "$COMMANDS_DIR/web-ui.md"
+    print_success "  Installed: $COMMANDS_DIR/web-ui.md"
+    echo ""
+
+    # Create symlink for claude-web command
+    print_header "Step 4: Creating claude-web launcher..."
+    local BIN_DIR="$HOME/.local/bin"
+    mkdir -p "$BIN_DIR"
+    local SYMLINK_PATH="$BIN_DIR/claude-web"
+
+    # Create launcher script instead of symlink (more portable)
+    cat > "$SYMLINK_PATH" << EOF
+#!/bin/bash
+# Claude Web UI Launcher
+exec "$WEB_UI_DIR/scripts/start.sh" "\$@"
+EOF
+    chmod +x "$SYMLINK_PATH"
+    print_success "  Created: $SYMLINK_PATH"
+
+    # Check if ~/.local/bin is in PATH
+    if [[ ":$PATH:" != *":$BIN_DIR:"* ]]; then
+        print_warning ""
+        print_warning "Note: $BIN_DIR is not in your PATH."
+        print_warning "Add this to your shell profile (~/.bashrc or ~/.zshrc):"
+        print_warning "  export PATH=\"\$HOME/.local/bin:\$PATH\""
+    fi
+    echo ""
+
+    print_success "Web UI installed!"
+    echo ""
+    echo "To start the Web UI:"
+    echo "  1. Run: claude-web (if ~/.local/bin is in PATH)"
+    echo "  2. Or run: $WEB_UI_DIR/scripts/start.sh"
+    echo ""
+    echo "The Web UI provides:"
+    echo "  - Browser-based terminal with full Claude Code experience"
+    echo "  - Plans sidebar with filtering by status/category"
+    echo "  - Real-time updates when plan files change"
+    echo "  - Status management (pending/in-progress/completed)"
+    echo "  - Add timestamped notes to plans"
+    echo "  - Dark/light theme toggle"
+    echo ""
+}
+
 # Install everything (A + B + D)
 install_everything() {
     print_header "Installing Everything (Options A + B + D)..."
@@ -509,7 +609,7 @@ do_uninstall() {
     local removed=false
 
     # Remove all slash commands
-    for cmd in save-plan list-plans search-plans archive-plan sync-status; do
+    for cmd in save-plan list-plans search-plans archive-plan sync-status web-ui; do
         if [[ -f "$COMMANDS_DIR/${cmd}.md" ]]; then
             rm "$COMMANDS_DIR/${cmd}.md"
             print_success "Removed: $COMMANDS_DIR/${cmd}.md"
@@ -538,6 +638,26 @@ do_uninstall() {
         # Remove shared directory if empty
         rmdir "$SHARED_DIR" 2>/dev/null || true
         removed=true
+    fi
+
+    # Remove Option E (Web UI)
+    local WEB_UI_DIR="$CLAUDE_DIR/web-ui"
+    if [[ -d "$WEB_UI_DIR" ]]; then
+        read -p "Remove Web UI directory ($WEB_UI_DIR)? [y/N] " remove_webui
+        if [[ "$remove_webui" =~ ^[Yy]$ ]]; then
+            rm -rf "$WEB_UI_DIR"
+            print_success "Removed: $WEB_UI_DIR"
+            removed=true
+
+            # Also remove claude-web launcher if it points to this installation
+            local LAUNCHER="$HOME/.local/bin/claude-web"
+            if [[ -f "$LAUNCHER" ]]; then
+                rm "$LAUNCHER"
+                print_success "Removed: $LAUNCHER"
+            fi
+        else
+            print_warning "Kept: $WEB_UI_DIR"
+        fi
     fi
 
     # Remove config file (ask first)
@@ -593,15 +713,21 @@ main() {
     echo "     - Auto-categorizes: bugfix, refactor, docs, test, feature"
     echo "     - Includes /sync-status command"
     echo ""
-    echo "  5) Install Everything (A + B + D)"
+    echo "  5) Web UI (Option E)"
+    echo "     - Browser-based planning interface"
+    echo "     - Full terminal + plans sidebar"
+    echo "     - Real-time updates, status management"
+    echo "     - Requires Node.js 18+"
+    echo ""
+    echo "  6) Install Everything (A + B + D)"
     echo "     - All slash commands + all hooks"
     echo ""
-    echo "  6) Uninstall"
+    echo "  7) Uninstall"
     echo "     - Remove all installed components"
     echo ""
-    echo "  7) Exit"
+    echo "  8) Exit"
     echo ""
-    read -p "Enter choice [1-7]: " choice
+    read -p "Enter choice [1-8]: " choice
 
     case $choice in
         1)
@@ -617,17 +743,20 @@ main() {
             install_always_on
             ;;
         5)
-            install_everything
+            install_web_ui
             ;;
         6)
-            uninstall
+            install_everything
             ;;
         7)
+            uninstall
+            ;;
+        8)
             echo "Goodbye!"
             exit 0
             ;;
         *)
-            print_error "Invalid choice. Please enter 1-7."
+            print_error "Invalid choice. Please enter 1-8."
             exit 1
             ;;
     esac

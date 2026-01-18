@@ -1,0 +1,18 @@
+{
+  "server": {
+    "port": 3847,
+    "host": "localhost"
+  },
+  "claude": {
+    "command": "claude",
+    "args": ["--dangerously-skip-permissions"]
+  },
+  "plans": {
+    "directory": "./docs/plans",
+    "archiveDirectory": "./docs/plans/archive"
+  },
+  "ui": {
+    "theme": "dark",
+    "autoOpenBrowser": true
+  }
+}
