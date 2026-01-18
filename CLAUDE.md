@@ -6,21 +6,26 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 This repository provides tools to rename Claude Code plan files from auto-generated names (e.g., `groovy-gathering-chipmunk.md`) to descriptive, date-stamped names (e.g., `feature-add-user-auth-01.18.26.md`).
 
-Two installation options are available:
+Three installation options are available:
 - **Option A (Slash Command)**: Manual `/save-plan` command for on-demand use
 - **Option B (Automatic Hook)**: Runs on Claude Code session stop via the `Stop` hook
+- **Option C (Quick Plugin)**: One-liner install via `curl | bash` that installs everything
 
 ## Architecture
 
 ```
-install.sh                           # Interactive installer (bash menu, options 1-5)
+install.sh                           # Interactive installer (bash menu, options 1-6)
+quick-install.sh                     # One-liner installer for Option C (curl | bash)
 ├── option-a-slash-command/
 │   └── save-plan.md                 # Slash command definition for ~/.claude/commands/
 ├── option-b-automatic/
 │   ├── settings.json                # Sample Claude settings with Stop hook config
 │   └── hooks/organize-plan.sh       # Hook script with inline fallback utilities
+├── option-c-plugin/
+│   ├── README.md                    # Option C documentation
+│   └── uninstall.sh                 # Standalone uninstall script
 └── shared/
-    └── plan-utils.sh                # Shared bash functions for both options
+    └── plan-utils.sh                # Shared bash functions for all options
 ```
 
 ## Key Functions (shared/plan-utils.sh)

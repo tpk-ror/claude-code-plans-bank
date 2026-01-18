@@ -99,6 +99,105 @@ install_automatic() {
     fi
 }
 
+# Check if jq is available
+has_jq() {
+    command -v jq &> /dev/null
+}
+
+# Merge hook configuration into existing settings.json using jq
+merge_settings_with_jq() {
+    local temp_file=$(mktemp)
+
+    # Check if hooks.Stop exists and merge appropriately
+    if jq -e '.hooks.Stop' "$SETTINGS_FILE" > /dev/null 2>&1; then
+        # Stop hook exists, add our hook to it if not already present
+        if ! jq -e '.hooks.Stop[].hooks[] | select(.command == "~/.claude/hooks/organize-plan.sh")' "$SETTINGS_FILE" > /dev/null 2>&1; then
+            jq '.hooks.Stop[0].hooks += [{"type": "command", "command": "~/.claude/hooks/organize-plan.sh"}]' "$SETTINGS_FILE" > "$temp_file"
+            mv "$temp_file" "$SETTINGS_FILE"
+            return 0
+        else
+            # Already present
+            rm "$temp_file"
+            return 1
+        fi
+    elif jq -e '.hooks' "$SETTINGS_FILE" > /dev/null 2>&1; then
+        # hooks exists but no Stop, add Stop
+        jq '.hooks.Stop = [{"matcher": "*", "hooks": [{"type": "command", "command": "~/.claude/hooks/organize-plan.sh"}]}]' "$SETTINGS_FILE" > "$temp_file"
+        mv "$temp_file" "$SETTINGS_FILE"
+        return 0
+    else
+        # No hooks at all, add the whole structure
+        jq '. + {"hooks": {"Stop": [{"matcher": "*", "hooks": [{"type": "command", "command": "~/.claude/hooks/organize-plan.sh"}]}]}}' "$SETTINGS_FILE" > "$temp_file"
+        mv "$temp_file" "$SETTINGS_FILE"
+        return 0
+    fi
+}
+
+# Install plugin (Option C) - combines slash command + hook with auto-merge
+install_plugin() {
+    print_header "Installing Quick Plugin (Option C)..."
+    echo ""
+
+    # Install slash command
+    print_header "Step 1: Installing slash command..."
+    mkdir -p "$COMMANDS_DIR"
+    cp "$SCRIPT_DIR/option-a-slash-command/save-plan.md" "$COMMANDS_DIR/save-plan.md"
+    print_success "  Installed: $COMMANDS_DIR/save-plan.md"
+    echo ""
+
+    # Install hook script
+    print_header "Step 2: Installing hook script..."
+    mkdir -p "$HOOKS_DIR"
+    cp "$SCRIPT_DIR/option-b-automatic/hooks/organize-plan.sh" "$HOOKS_DIR/organize-plan.sh"
+    chmod +x "$HOOKS_DIR/organize-plan.sh"
+    print_success "  Installed: $HOOKS_DIR/organize-plan.sh"
+    echo ""
+
+    # Install shared utilities
+    print_header "Step 3: Installing shared utilities..."
+    mkdir -p "$CLAUDE_DIR/shared"
+    cp "$SCRIPT_DIR/shared/plan-utils.sh" "$CLAUDE_DIR/shared/plan-utils.sh"
+    print_success "  Installed: $CLAUDE_DIR/shared/plan-utils.sh"
+    echo ""
+
+    # Handle settings.json with auto-merge
+    print_header "Step 4: Configuring settings.json..."
+    if [[ ! -f "$SETTINGS_FILE" ]]; then
+        # No existing settings, create new
+        mkdir -p "$CLAUDE_DIR"
+        cp "$SCRIPT_DIR/option-b-automatic/settings.json" "$SETTINGS_FILE"
+        print_success "  Created: $SETTINGS_FILE"
+    elif has_jq; then
+        # Existing settings with jq available - try to merge
+        if merge_settings_with_jq; then
+            print_success "  Merged hook configuration into existing settings.json"
+        else
+            print_warning "  Hook already configured in settings.json"
+        fi
+    else
+        # Existing settings without jq
+        print_warning "  Existing settings.json found, but jq not available for auto-merge"
+        echo ""
+        echo "Add this hook configuration to your ~/.claude/settings.json:"
+        echo ""
+        echo '  "hooks": {'
+        echo '    "Stop": ['
+        echo '      {'
+        echo '        "matcher": "*",'
+        echo '        "hooks": ['
+        echo '          {'
+        echo '            "type": "command",'
+        echo '            "command": "~/.claude/hooks/organize-plan.sh"'
+        echo '          }'
+        echo '        ]'
+        echo '      }'
+        echo '    ]'
+        echo '  }'
+        echo ""
+        echo "Tip: Install jq for auto-merge: brew install jq (macOS) or apt install jq (Linux)"
+    fi
+}
+
 # Uninstall everything
 uninstall() {
     print_header "Uninstalling claude-code-plans-bank..."
@@ -114,6 +213,14 @@ uninstall() {
     if [[ -f "$HOOKS_DIR/organize-plan.sh" ]]; then
         rm "$HOOKS_DIR/organize-plan.sh"
         print_success "Removed: $HOOKS_DIR/organize-plan.sh"
+        removed=true
+    fi
+
+    if [[ -f "$CLAUDE_DIR/shared/plan-utils.sh" ]]; then
+        rm "$CLAUDE_DIR/shared/plan-utils.sh"
+        print_success "Removed: $CLAUDE_DIR/shared/plan-utils.sh"
+        # Remove shared directory if empty
+        rmdir "$CLAUDE_DIR/shared" 2>/dev/null || true
         removed=true
     fi
 
@@ -143,15 +250,19 @@ main() {
     echo "     - Renames files automatically on session stop"
     echo "     - Requires settings.json configuration"
     echo ""
-    echo "  3) Both options"
+    echo "  3) Both options (A + B)"
     echo "     - Install slash command AND automatic hook"
     echo ""
-    echo "  4) Uninstall"
+    echo -e "  ${GREEN}4) Quick Plugin (Option C) - RECOMMENDED${NC}"
+    echo "     - Installs everything (slash command + hook + utilities)"
+    echo "     - Auto-merges settings.json if jq is available"
+    echo ""
+    echo "  5) Uninstall"
     echo "     - Remove installed components"
     echo ""
-    echo "  5) Exit"
+    echo "  6) Exit"
     echo ""
-    read -p "Enter choice [1-5]: " choice
+    read -p "Enter choice [1-6]: " choice
 
     case $choice in
         1)
@@ -166,14 +277,17 @@ main() {
             install_automatic
             ;;
         4)
-            uninstall
+            install_plugin
             ;;
         5)
+            uninstall
+            ;;
+        6)
             echo "Goodbye!"
             exit 0
             ;;
         *)
-            print_error "Invalid choice. Please enter 1-5."
+            print_error "Invalid choice. Please enter 1-6."
             exit 1
             ;;
     esac
@@ -183,8 +297,8 @@ main() {
     echo ""
     echo "Next steps:"
     echo "  1. Create a plan in Claude Code (use plan mode)"
-    echo "  2. Run /save-plan to organize it (Option A)"
-    echo "     OR let it auto-organize on session stop (Option B)"
+    echo "  2. Run /save-plan to organize it (Option A/C)"
+    echo "     OR let it auto-organize on session stop (Option B/C)"
     echo "  3. Find your plans in ./plans/ with descriptive names"
     echo ""
 }

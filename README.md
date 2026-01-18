@@ -12,7 +12,7 @@ When you create plans in Claude Code's plan mode, they get saved with auto-gener
 
 ## The Solution
 
-This project provides two options to automatically rename your plans to a descriptive format:
+This project provides three options to automatically rename your plans to a descriptive format:
 
 ```
 feature-{extracted-name}-{MM.DD.YY}.md
@@ -101,6 +101,31 @@ If you have an existing `~/.claude/settings.json`, add this hook configuration:
 4. Renames to `feature-{name}-{date}.md`
 5. Skips already-organized files
 
+### Option C: Quick Plugin (Recommended)
+
+One-liner installation that sets up everything automatically.
+
+**Install:**
+```bash
+curl -fsSL https://raw.githubusercontent.com/yourusername/claude-code-plans-bank/main/quick-install.sh | bash
+```
+
+Or via the interactive installer:
+```bash
+./install.sh  # Choose option 4
+```
+
+**What gets installed:**
+- Slash command (`/save-plan`)
+- Automatic hook (runs on session stop)
+- Shared utilities
+- Settings.json configuration (auto-merged if `jq` is available)
+
+**Uninstall:**
+```bash
+curl -fsSL https://raw.githubusercontent.com/yourusername/claude-code-plans-bank/main/quick-install.sh | bash -s -- --uninstall
+```
+
 ## Naming Format
 
 | Component | Description | Example |
@@ -126,6 +151,7 @@ claude-code-plans-bank/
 ├── README.md                      # This file
 ├── LICENSE                        # MIT License
 ├── install.sh                     # Interactive installer
+├── quick-install.sh               # One-liner installer for Option C
 │
 ├── option-a-slash-command/
 │   └── save-plan.md               # Slash command definition
@@ -134,6 +160,10 @@ claude-code-plans-bank/
 │   ├── settings.json              # Settings snippet to merge
 │   └── hooks/
 │       └── organize-plan.sh       # Hook script
+│
+├── option-c-plugin/
+│   ├── README.md                  # Option C documentation
+│   └── uninstall.sh               # Standalone uninstall script
 │
 └── shared/
     └── plan-utils.sh              # Shared utility functions
@@ -155,13 +185,15 @@ The `--commit` flag is opt-in. If you never want git integration, simply don't u
 
 ## Comparison
 
-| Feature | Option A (Slash Command) | Option B (Automatic) |
-|---------|-------------------------|---------------------|
-| Control | Manual | Automatic |
-| Custom names | Yes | No |
-| Git integration | Yes (`--commit`) | No |
-| Setup complexity | Simple | Moderate |
-| Best for | Selective saving | Always organizing |
+| Feature | Option A (Slash) | Option B (Hook) | Option C (Plugin) |
+|---------|------------------|-----------------|-------------------|
+| Control | Manual | Automatic | Both |
+| Custom names | Yes | No | Yes |
+| Git integration | Yes (`--commit`) | No | Yes (`--commit`) |
+| Setup complexity | Simple | Moderate | Easiest |
+| One-liner install | No | No | Yes |
+| Auto-merge settings | No | No | Yes (with jq) |
+| Best for | Selective saving | Always organizing | Quick full setup |
 
 ## Troubleshooting
 
@@ -186,13 +218,19 @@ The tool extracts the first line starting with `# `. If your plan doesn't have a
 ## Uninstalling
 
 ```bash
-./install.sh  # Choose option 4
+./install.sh  # Choose option 5
+```
+
+Or via curl (if installed with Option C):
+```bash
+curl -fsSL https://raw.githubusercontent.com/yourusername/claude-code-plans-bank/main/quick-install.sh | bash -s -- --uninstall
 ```
 
 Or manually:
 ```bash
 rm ~/.claude/commands/save-plan.md
 rm ~/.claude/hooks/organize-plan.sh
+rm ~/.claude/shared/plan-utils.sh
 # Edit ~/.claude/settings.json to remove the hook
 ```
 
