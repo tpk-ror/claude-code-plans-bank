@@ -8,7 +8,7 @@ Organize your Claude Code plan files with descriptive, date-stamped naming conve
 
 ## The Problem
 
-When you create plans in Claude Code's plan mode, they get saved with auto-generated names like `groovy-gathering-chipmunk.md`. These names are fun but make it hard to find specific plans later.
+When you create plans in Claude Code's plan mode, they get saved with auto-generated names like `sweet-berry-wine.md`. These names are fun but make it hard to find specific plans later.
 
 ## The Solution
 
@@ -146,6 +146,7 @@ claude-code-plans-bank/
 By default, plans are saved to `./plans/` in your project. To change this:
 
 1. For slash command: Edit `~/.claude/commands/save-plan.md`
+
 2. For automatic hook: Edit `~/.claude/hooks/organize-plan.sh` and change `PLANS_DIR`
 
 ### Disabling Git Commits
