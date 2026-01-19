@@ -2,7 +2,32 @@ class TerminalHandler {
   constructor(claudeService, fileWatcher) {
     this.claudeService = claudeService;
     this.fileWatcher = fileWatcher;
-    this.connections = new Map(); // ws -> { sessionId, unsubscribe }
+    this.connections = new Map(); // ws -> { sessionId, unsubscribe, pingInterval, unsubscribeError }
+
+    // Listen for session-error events from claudeService
+    this.claudeService.on('session-error', (sessionId, error) => {
+      this.broadcastSessionError(sessionId, error);
+    });
+  }
+
+  /**
+   * Broadcast session error to relevant WebSocket connections
+   * @param {string|null} sessionId
+   * @param {Error} error
+   */
+  broadcastSessionError(sessionId, error) {
+    for (const [ws, conn] of this.connections) {
+      // Send to connections with matching session or no session (for pre-session errors)
+      if (!sessionId || conn.sessionId === sessionId || !conn.sessionId) {
+        if (ws.readyState === 1) { // WebSocket.OPEN
+          ws.send(JSON.stringify({
+            type: 'session-error',
+            error: error.message,
+            code: error.code || 'UNKNOWN_ERROR'
+          }));
+        }
+      }
+    }
   }
 
   /**
@@ -11,16 +36,29 @@ class TerminalHandler {
    * @param {http.IncomingMessage} req - HTTP request
    */
   handleConnection(ws, req) {
-    console.log('New WebSocket connection');
+    console.log('[WS] New WebSocket connection');
 
     // Parse URL for session ID if reconnecting
     const url = new URL(req.url, `http://${req.headers.host}`);
     const existingSessionId = url.searchParams.get('sessionId');
 
+    // Set up heartbeat ping/pong to keep connection alive
+    const pingInterval = setInterval(() => {
+      if (ws.readyState === 1) { // WebSocket.OPEN
+        ws.ping();
+      }
+    }, 30000); // Ping every 30 seconds
+
+    ws.on('pong', () => {
+      // Connection is alive - optionally log for debugging
+      // console.log('[WS] Pong received');
+    });
+
     // Track this connection
     this.connections.set(ws, {
       sessionId: existingSessionId || null,
-      unsubscribe: null
+      unsubscribe: null,
+      pingInterval
     });
 
     // Handle messages from client
@@ -29,24 +67,36 @@ class TerminalHandler {
         const message = JSON.parse(data.toString());
         this.handleMessage(ws, message);
       } catch (err) {
-        console.error('Error parsing WebSocket message:', err);
+        console.error('[WS] Error parsing WebSocket message:', err);
       }
     });
 
     // Handle connection close
-    ws.on('close', () => {
+    ws.on('close', (code, reason) => {
+      console.log(`[WS] WebSocket connection closed (code: ${code}, reason: ${reason || 'none'})`);
       const conn = this.connections.get(ws);
-      if (conn && conn.unsubscribe) {
-        conn.unsubscribe();
+      if (conn) {
+        if (conn.unsubscribe) {
+          conn.unsubscribe();
+        }
+        if (conn.pingInterval) {
+          clearInterval(conn.pingInterval);
+        }
       }
       this.connections.delete(ws);
-      console.log('WebSocket connection closed');
     });
 
     // Handle errors
     ws.on('error', (err) => {
-      console.error('WebSocket error:', err);
+      console.error('[WS] WebSocket error:', err);
     });
+
+    // Send connection confirmation
+    ws.send(JSON.stringify({
+      type: 'connected',
+      terminalMode: this.claudeService.getTerminalMode(),
+      claudeAvailable: this.claudeService.checkClaudeAvailable()
+    }));
 
     // If reconnecting to existing session, reattach
     if (existingSessionId) {
@@ -100,10 +150,22 @@ class TerminalHandler {
       this.claudeService.killSession(conn.sessionId);
     }
 
-    // Create new session
-    const session = this.claudeService.createSession({
-      planPath: payload.planPath
-    });
+    let session;
+    try {
+      // Create new session
+      session = this.claudeService.createSession({
+        planPath: payload.planPath,
+        planMode: payload.planMode
+      });
+    } catch (error) {
+      // Send error to client
+      ws.send(JSON.stringify({
+        type: 'session-error',
+        error: error.message,
+        code: error.code || 'SESSION_CREATE_FAILED'
+      }));
+      return;
+    }
 
     // Subscribe to session output
     const unsubscribe = this.claudeService.onData(session.id, (data) => {
@@ -126,13 +188,26 @@ class TerminalHandler {
       }
     };
 
+    // Listen for session errors
+    const errorHandler = (sessionId, error) => {
+      if (sessionId === session.id && ws.readyState === 1) {
+        ws.send(JSON.stringify({
+          type: 'session-error',
+          error: error.message,
+          code: error.code || 'SESSION_ERROR'
+        }));
+      }
+    };
+
     this.claudeService.on('session-exit', exitHandler);
+    this.claudeService.on('session-error', errorHandler);
 
     // Update connection tracking
     conn.sessionId = session.id;
     conn.unsubscribe = () => {
       unsubscribe();
       this.claudeService.removeListener('session-exit', exitHandler);
+      this.claudeService.removeListener('session-error', errorHandler);
     };
 
     // Send session info to client

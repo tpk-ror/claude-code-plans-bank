@@ -1,4 +1,4 @@
-const { spawn } = require('child_process');
+const { spawn, execSync } = require('child_process');
 const path = require('path');
 const os = require('os');
 const EventEmitter = require('events');
@@ -10,10 +10,10 @@ let usePty = false;
 try {
   pty = require('node-pty');
   usePty = true;
-  console.log('Using node-pty for terminal emulation');
+  console.log('[ClaudeService] Using node-pty for terminal emulation');
 } catch (err) {
-  console.log('node-pty not available, using child_process fallback');
-  console.log('Terminal features like resize may be limited');
+  console.log('[ClaudeService] node-pty not available, using child_process fallback');
+  console.log('[ClaudeService] Terminal features like resize may be limited');
 }
 
 class ClaudeService extends EventEmitter {
@@ -23,6 +23,43 @@ class ClaudeService extends EventEmitter {
     this.config = config;
     this.sessions = new Map();
     this.sessionCounter = 0;
+    this.claudeAvailable = null; // Cache the check result
+  }
+
+  /**
+   * Check if Claude CLI is available in PATH
+   * @returns {boolean}
+   */
+  checkClaudeAvailable() {
+    if (this.claudeAvailable !== null) {
+      return this.claudeAvailable;
+    }
+
+    const command = this.config.command || 'claude';
+    const isWindows = os.platform() === 'win32';
+
+    try {
+      if (isWindows) {
+        execSync(`where ${command}`, { stdio: 'ignore' });
+      } else {
+        execSync(`which ${command}`, { stdio: 'ignore' });
+      }
+      this.claudeAvailable = true;
+      console.log(`[ClaudeService] Claude CLI found: ${command}`);
+      return true;
+    } catch {
+      this.claudeAvailable = false;
+      console.error(`[ClaudeService] Claude CLI not found: ${command}`);
+      return false;
+    }
+  }
+
+  /**
+   * Get terminal mode (pty or spawn)
+   * @returns {string}
+   */
+  getTerminalMode() {
+    return usePty ? 'pty' : 'spawn';
   }
 
   /**
@@ -32,27 +69,50 @@ class ClaudeService extends EventEmitter {
    * @returns {Object} Session info including id and process instance
    */
   createSession(options = {}) {
+    // Check if Claude CLI is available first
+    if (!this.checkClaudeAvailable()) {
+      const error = new Error(
+        'Claude CLI not found in PATH. Please install it first: npm install -g @anthropic-ai/claude-code'
+      );
+      error.code = 'CLAUDE_NOT_FOUND';
+      this.emit('session-error', null, error);
+      throw error;
+    }
+
     const sessionId = `session-${++this.sessionCounter}-${Date.now()}`;
 
     // Build command arguments
     const args = [...(this.config.args || [])];
 
-    // Note: planPath is stored in session for reference but not passed to CLI
-    // Claude Code CLI doesn't support --plan flag
+    // Add --plan flag if planMode is enabled (starts Claude in plan mode)
+    if (options.planMode) {
+      args.push('--plan');
+    }
 
     const command = this.config.command || 'claude';
 
+    console.log(`[ClaudeService] Creating session ${sessionId} with command: ${command} ${args.join(' ')}`);
+    console.log(`[ClaudeService] Working directory: ${this.projectDir}`);
+    console.log(`[ClaudeService] Terminal mode: ${this.getTerminalMode()}`);
+
     let session;
 
-    if (usePty && pty) {
-      session = this.createPtySession(sessionId, command, args, options);
-    } else {
-      session = this.createSpawnSession(sessionId, command, args, options);
-    }
+    try {
+      if (usePty && pty) {
+        session = this.createPtySession(sessionId, command, args, options);
+      } else {
+        session = this.createSpawnSession(sessionId, command, args, options);
+      }
 
-    this.sessions.set(sessionId, session);
-    this.emit('session-created', sessionId, session);
-    return session;
+      this.sessions.set(sessionId, session);
+      this.emit('session-created', sessionId, session);
+      console.log(`[ClaudeService] Session ${sessionId} created successfully`);
+      return session;
+    } catch (err) {
+      console.error(`[ClaudeService] Failed to create session: ${err.message}`);
+      this.emit('session-error', sessionId, err);
+      throw err;
+    }
   }
 
   /**
@@ -100,11 +160,24 @@ class ClaudeService extends EventEmitter {
     };
 
     ptyProcess.onExit(({ exitCode, signal }) => {
+      console.log(`[ClaudeService] PTY session ${sessionId} exited with code ${exitCode}, signal ${signal}`);
       session.active = false;
       session.exitCode = exitCode;
       session.exitSignal = signal;
       this.emit('session-exit', sessionId, exitCode, signal, session);
     });
+
+    // Handle pty spawn errors
+    try {
+      // Test if the process started successfully by checking if it's active
+      if (!ptyProcess.pid) {
+        throw new Error('PTY process failed to start');
+      }
+    } catch (err) {
+      console.error(`[ClaudeService] PTY session ${sessionId} error: ${err.message}`);
+      session.active = false;
+      this.emit('session-error', sessionId, err);
+    }
 
     return session;
   }
@@ -150,6 +223,7 @@ class ClaudeService extends EventEmitter {
 
     // Handle exit
     childProcess.on('exit', (code, signal) => {
+      console.log(`[ClaudeService] Spawn session ${sessionId} exited with code ${code}, signal ${signal}`);
       session.active = false;
       session.exitCode = code;
       session.exitSignal = signal;
@@ -158,10 +232,18 @@ class ClaudeService extends EventEmitter {
 
     // Handle errors
     childProcess.on('error', (err) => {
-      console.error(`Session ${sessionId} error:`, err);
+      console.error(`[ClaudeService] Spawn session ${sessionId} error: ${err.message}`);
       session.active = false;
       this.emit('session-error', sessionId, err);
     });
+
+    // Check if spawned successfully
+    if (!childProcess.pid) {
+      const err = new Error('Child process failed to start');
+      console.error(`[ClaudeService] Spawn session ${sessionId} error: ${err.message}`);
+      session.active = false;
+      this.emit('session-error', sessionId, err);
+    }
 
     return session;
   }

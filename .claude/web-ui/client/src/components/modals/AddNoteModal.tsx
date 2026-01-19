@@ -1,5 +1,8 @@
 import { useState, useEffect } from 'react';
 import { Modal } from './Modal';
+import { Button } from '@/components/ui/button';
+import { Textarea } from '@/components/ui/textarea';
+import { DialogFooter } from '@/components/ui/dialog';
 
 interface AddNoteModalProps {
   isOpen: boolean;
@@ -25,7 +28,6 @@ export function AddNoteModal({
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (!note.trim()) {
-      alert('Please enter a note');
       return;
     }
     if (filename) {
@@ -42,10 +44,12 @@ export function AddNoteModal({
 
   return (
     <Modal isOpen={isOpen} onClose={handleClose} title="Add Note" size="sm">
-      <form onSubmit={handleSubmit}>
-        <div className="form-group">
-          <label htmlFor="noteContent">Note</label>
-          <textarea
+      <form onSubmit={handleSubmit} className="space-y-4">
+        <div className="space-y-2">
+          <label htmlFor="noteContent" className="text-sm font-medium">
+            Note
+          </label>
+          <Textarea
             id="noteContent"
             value={note}
             onChange={(e) => setNote(e.target.value)}
@@ -54,14 +58,14 @@ export function AddNoteModal({
             autoFocus
           />
         </div>
-        <div className="form-actions">
-          <button type="button" className="btn btn-ghost" onClick={handleClose}>
+        <DialogFooter className="gap-2 pt-2">
+          <Button type="button" variant="ghost" onClick={handleClose}>
             Cancel
-          </button>
-          <button type="submit" className="btn btn-primary">
+          </Button>
+          <Button type="submit" variant="brand" disabled={!note.trim()}>
             Add Note
-          </button>
-        </div>
+          </Button>
+        </DialogFooter>
       </form>
     </Modal>
   );

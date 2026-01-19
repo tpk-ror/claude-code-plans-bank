@@ -2,6 +2,7 @@ const express = require('express');
 const http = require('http');
 const path = require('path');
 const fs = require('fs');
+const { execSync } = require('child_process');
 const { WebSocketServer } = require('ws');
 
 // Services
@@ -147,10 +148,47 @@ const PORT = config.server.port || 3847;
 const HOST = config.server.host || 'localhost';
 
 server.listen(PORT, HOST, () => {
-  console.log(`\n🚀 Claude Code Web UI running at http://${HOST}:${PORT}`);
-  console.log(`📁 Plans directory: ${plansDir}`);
-  console.log(`📂 Project directory: ${projectDir}`);
-  console.log(`🔄 Global sync: ${syncFromGlobal ? 'enabled' : 'disabled'}\n`);
+  console.log('\n' + '='.repeat(60));
+  console.log(' Claude Code Web UI - Startup Diagnostics');
+  console.log('='.repeat(60));
+
+  console.log(`\n[Server] URL: http://${HOST}:${PORT}`);
+  console.log(`[Server] Plans directory: ${plansDir}`);
+  console.log(`[Server] Project directory: ${projectDir}`);
+  console.log(`[Server] Global sync: ${syncFromGlobal ? 'enabled' : 'disabled'}`);
+
+  // Check Claude CLI availability
+  const claudeCommand = config.claude?.command || 'claude';
+  const isWindows = process.platform === 'win32';
+  try {
+    if (isWindows) {
+      execSync(`where ${claudeCommand}`, { stdio: 'ignore' });
+    } else {
+      execSync(`which ${claudeCommand}`, { stdio: 'ignore' });
+    }
+    console.log(`[Server] Claude CLI: Available (${claudeCommand})`);
+  } catch {
+    console.warn(`[Server] Claude CLI: NOT FOUND - install with: npm install -g @anthropic-ai/claude-code`);
+  }
+
+  // Check node-pty availability
+  try {
+    require('node-pty');
+    console.log('[Server] Terminal mode: node-pty (full terminal support)');
+  } catch {
+    console.log('[Server] Terminal mode: child_process (fallback, limited features)');
+  }
+
+  // Check React build
+  if (useReactBuild) {
+    console.log('[Server] Client: React build (production)');
+  } else {
+    console.log('[Server] Client: Legacy/development mode');
+  }
+
+  console.log('\n' + '='.repeat(60));
+  console.log(' Ready to accept connections');
+  console.log('='.repeat(60) + '\n');
 });
 
 // Graceful shutdown

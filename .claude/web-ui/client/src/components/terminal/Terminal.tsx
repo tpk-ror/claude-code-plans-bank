@@ -10,21 +10,29 @@ interface TerminalProps {
   isDark?: boolean;
 }
 
+// Use refs to avoid recreating terminal when callbacks/session state change
+function useLatestRef<T>(value: T) {
+  const ref = useRef(value);
+  ref.current = value;
+  return ref;
+}
+
+// ShadCN-compatible dark theme (zinc palette)
 const darkTheme = {
-  background: '#1a1a1a',
-  foreground: '#e4e4e4',
-  cursor: '#e4e4e4',
-  cursorAccent: '#1a1a1a',
-  selectionBackground: 'rgba(99, 102, 241, 0.3)',
-  black: '#1a1a1a',
+  background: 'hsl(240 10% 3.9%)',
+  foreground: 'hsl(0 0% 98%)',
+  cursor: 'hsl(0 0% 98%)',
+  cursorAccent: 'hsl(240 10% 3.9%)',
+  selectionBackground: 'hsla(239 84% 67% / 0.3)',
+  black: '#18181b',
   red: '#ef4444',
   green: '#22c55e',
   yellow: '#f59e0b',
   blue: '#3b82f6',
   magenta: '#a855f7',
   cyan: '#06b6d4',
-  white: '#e4e4e4',
-  brightBlack: '#707070',
+  white: '#fafafa',
+  brightBlack: '#71717a',
   brightRed: '#f87171',
   brightGreen: '#4ade80',
   brightYellow: '#fbbf24',
@@ -34,13 +42,14 @@ const darkTheme = {
   brightWhite: '#ffffff',
 };
 
+// ShadCN-compatible light theme (zinc palette)
 const lightTheme = {
-  background: '#fafafa',
-  foreground: '#1a1a1a',
-  cursor: '#1a1a1a',
-  cursorAccent: '#fafafa',
-  selectionBackground: 'rgba(99, 102, 241, 0.2)',
-  black: '#1a1a1a',
+  background: 'hsl(0 0% 100%)',
+  foreground: 'hsl(240 10% 3.9%)',
+  cursor: 'hsl(240 10% 3.9%)',
+  cursorAccent: 'hsl(0 0% 100%)',
+  selectionBackground: 'hsla(239 84% 67% / 0.2)',
+  black: '#18181b',
   red: '#dc2626',
   green: '#16a34a',
   yellow: '#ca8a04',
@@ -48,7 +57,7 @@ const lightTheme = {
   magenta: '#9333ea',
   cyan: '#0891b2',
   white: '#fafafa',
-  brightBlack: '#555555',
+  brightBlack: '#52525b',
   brightRed: '#ef4444',
   brightGreen: '#22c55e',
   brightYellow: '#eab308',
@@ -81,17 +90,24 @@ export function Terminal({
   const xtermRef = useRef<XTerm | null>(null);
   const fitAddonRef = useRef<FitAddon | null>(null);
 
+  // Use refs to avoid recreating terminal when callbacks change
+  const onDataRef = useLatestRef(onData);
+  const onResizeRef = useLatestRef(onResize);
+
   const fit = useCallback(() => {
-    if (fitAddonRef.current && xtermRef.current) {
-      try {
-        fitAddonRef.current.fit();
-      } catch {
-        // Ignore fit errors (container might not be visible)
+    if (fitAddonRef.current && xtermRef.current && containerRef.current) {
+      // Only fit if container has actual dimensions
+      if (containerRef.current.offsetHeight > 0 && containerRef.current.offsetWidth > 0) {
+        try {
+          fitAddonRef.current.fit();
+        } catch {
+          // Ignore fit errors (container might not be visible)
+        }
       }
     }
   }, []);
 
-  // Initialize terminal
+  // Initialize terminal - only recreate when isDark or terminalRef changes
   useEffect(() => {
     if (!containerRef.current) return;
 
@@ -110,22 +126,32 @@ export function Terminal({
     terminal.loadAddon(fitAddon);
 
     terminal.open(containerRef.current);
-    fitAddon.fit();
+
+    // Defer fit() to next frame to allow browser to compute container dimensions
+    requestAnimationFrame(() => {
+      if (containerRef.current && containerRef.current.offsetHeight > 0) {
+        try {
+          fitAddon.fit();
+        } catch {
+          // Ignore fit errors during initialization
+        }
+      }
+    });
 
     xtermRef.current = terminal;
     fitAddonRef.current = fitAddon;
 
-    // Handle terminal input
+    // Handle terminal input - always send, server validates session exists
     terminal.onData((data) => {
-      if (hasSession && onData) {
-        onData(data);
+      if (onDataRef.current) {
+        onDataRef.current(data);
       }
     });
 
-    // Handle resize
+    // Handle resize - always send, server validates session exists
     terminal.onResize(({ cols, rows }) => {
-      if (hasSession && onResize) {
-        onResize(cols, rows);
+      if (onResizeRef.current) {
+        onResizeRef.current(cols, rows);
       }
     });
 
@@ -150,7 +176,8 @@ export function Terminal({
       xtermRef.current = null;
       fitAddonRef.current = null;
     };
-  }, [onData, onResize, hasSession, isDark, terminalRef, fit]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isDark, terminalRef, fit]); // Refs are stable, no need to include them
 
   // Update theme when it changes
   useEffect(() => {
@@ -161,16 +188,19 @@ export function Terminal({
 
   // Fit terminal when hasSession changes (terminal becomes visible)
   useEffect(() => {
-    fit();
+    // Defer to next frame to allow layout recalculation after visibility change
+    const frameId = requestAnimationFrame(() => {
+      fit();
+    });
+    return () => cancelAnimationFrame(frameId);
   }, [hasSession, fit]);
 
   return (
     <div
       ref={containerRef}
+      className="h-full w-full rounded-none"
       style={{
-        width: '100%',
-        height: '100%',
-        background: isDark ? '#1a1a1a' : '#fafafa',
+        background: isDark ? 'hsl(240 10% 3.9%)' : 'hsl(0 0% 100%)',
       }}
     />
   );

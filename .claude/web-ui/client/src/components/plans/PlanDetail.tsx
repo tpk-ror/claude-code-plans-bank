@@ -1,6 +1,15 @@
 import { useState } from 'react';
-import { clsx } from 'clsx';
-import type { Plan } from '../../lib/types';
+import { X, Play, FileText, Archive, ChevronDown } from 'lucide-react';
+import { Button } from '@/components/ui/button';
+import { Badge } from '@/components/ui/badge';
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu';
+import { cn } from '@/lib/utils';
+import type { Plan } from '@/lib/types';
 
 interface PlanDetailProps {
   plan: Plan | null;
@@ -16,6 +25,19 @@ function formatStatus(status: string): string {
     .split('-')
     .map((word) => word.charAt(0).toUpperCase() + word.slice(1))
     .join(' ');
+}
+
+function getStatusVariant(status: Plan['status']): 'success' | 'warning' | 'info' {
+  switch (status) {
+    case 'completed':
+      return 'success';
+    case 'pending':
+      return 'warning';
+    case 'in-progress':
+      return 'info';
+    default:
+      return 'info';
+  }
 }
 
 function formatDate(dateStr: string | undefined): string {
@@ -42,118 +64,174 @@ export function PlanDetail({
   onArchive,
   onStatusChange,
 }: PlanDetailProps) {
-  const [showDropdown, setShowDropdown] = useState(false);
+  const [isCollapsed, setIsCollapsed] = useState(false);
 
   if (!plan) {
-    return (
-      <div className="plan-detail-panel collapsed">
-        <div className="panel-header">
-          <h3 className="panel-title">Select a plan</h3>
-          <button className="btn btn-sm btn-ghost" onClick={onClose}>
-            ✕
-          </button>
-        </div>
-        <div className="panel-content">
-          <p className="empty-state">
-            Select a plan from the sidebar to view details
-          </p>
-        </div>
-      </div>
-    );
+    return null;
   }
 
-  const statusClass = plan.status;
   const statuses: Plan['status'][] = ['pending', 'in-progress', 'completed'];
 
   return (
-    <div className="plan-detail-panel">
-      <div className="panel-header">
-        <h3 className="panel-title">{plan.title}</h3>
-        <button className="btn btn-sm btn-ghost" onClick={onClose}>
-          ✕
-        </button>
+    <div
+      className={cn(
+        'border-t border-border bg-card transition-all duration-200',
+        isCollapsed ? 'h-10' : 'h-52'
+      )}
+    >
+      {/* Header */}
+      <div className="flex h-10 items-center justify-between border-b border-border px-4">
+        <div className="flex items-center gap-2">
+          <button
+            onClick={() => setIsCollapsed(!isCollapsed)}
+            className="flex items-center gap-1 text-sm font-medium hover:text-foreground"
+          >
+            <ChevronDown
+              className={cn(
+                'h-4 w-4 transition-transform',
+                isCollapsed && '-rotate-90'
+              )}
+            />
+            <span className="line-clamp-1">{plan.title}</span>
+          </button>
+        </div>
+        <Button
+          variant="ghost"
+          size="icon"
+          className="h-7 w-7"
+          onClick={onClose}
+          title="Close"
+        >
+          <X className="h-4 w-4" />
+        </Button>
       </div>
-      <div className="panel-content">
-        <div className="plan-detail">
-          <div className="plan-detail-section">
-            <h4>Status</h4>
-            <div className="status-dropdown">
-              <span
-                className={clsx('status-badge', statusClass)}
-                onClick={() => setShowDropdown(!showDropdown)}
-              >
-                {formatStatus(plan.status)}
+
+      {/* Content */}
+      {!isCollapsed && (
+        <div className="flex h-[calc(100%-40px)] gap-6 overflow-y-auto p-4">
+          {/* Left column - Status & Description */}
+          <div className="flex-1 space-y-4">
+            {/* Status */}
+            <div className="space-y-1">
+              <span className="text-xs font-medium uppercase text-muted-foreground">
+                Status
               </span>
-              <div
-                className={clsx('status-dropdown-menu', { hidden: !showDropdown })}
-              >
-                {statuses.map((status) => (
-                  <button
-                    key={status}
-                    className="status-dropdown-item"
-                    onClick={() => {
-                      onStatusChange(plan.filename, status);
-                      setShowDropdown(false);
-                    }}
-                  >
-                    {formatStatus(status)}
-                  </button>
-                ))}
+              <div>
+                <DropdownMenu>
+                  <DropdownMenuTrigger asChild>
+                    <Badge
+                      variant={getStatusVariant(plan.status)}
+                      className="cursor-pointer"
+                    >
+                      {formatStatus(plan.status)}
+                      <ChevronDown className="ml-1 h-3 w-3" />
+                    </Badge>
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent align="start">
+                    {statuses.map((status) => (
+                      <DropdownMenuItem
+                        key={status}
+                        onClick={() => onStatusChange(plan.filename, status)}
+                      >
+                        {formatStatus(status)}
+                      </DropdownMenuItem>
+                    ))}
+                  </DropdownMenuContent>
+                </DropdownMenu>
+              </div>
+            </div>
+
+            {/* Description */}
+            {plan.description && (
+              <div className="space-y-1">
+                <span className="text-xs font-medium uppercase text-muted-foreground">
+                  Description
+                </span>
+                <p className="text-sm text-foreground">{plan.description}</p>
+              </div>
+            )}
+          </div>
+
+          {/* Middle column - Info */}
+          <div className="flex-1 space-y-4">
+            <div className="space-y-1">
+              <span className="text-xs font-medium uppercase text-muted-foreground">
+                Info
+              </span>
+              <div className="space-y-1 text-sm">
+                <p>
+                  <span className="text-muted-foreground">Category:</span>{' '}
+                  <span className="capitalize">{plan.category}</span>
+                </p>
+                <p>
+                  <span className="text-muted-foreground">Priority:</span>{' '}
+                  <span className="capitalize">{plan.priority}</span>
+                </p>
+                {plan.tags && plan.tags.length > 0 && (
+                  <p>
+                    <span className="text-muted-foreground">Tags:</span>{' '}
+                    {plan.tags.join(', ')}
+                  </p>
+                )}
+              </div>
+            </div>
+
+            <div className="space-y-1">
+              <span className="text-xs font-medium uppercase text-muted-foreground">
+                Dates
+              </span>
+              <div className="space-y-1 text-sm">
+                <p>
+                  <span className="text-muted-foreground">Created:</span>{' '}
+                  {formatDate(plan.createdAt)}
+                </p>
+                <p>
+                  <span className="text-muted-foreground">Updated:</span>{' '}
+                  {formatDate(plan.updatedAt)}
+                </p>
+                {plan.completedAt && (
+                  <p>
+                    <span className="text-muted-foreground">Completed:</span>{' '}
+                    {formatDate(plan.completedAt)}
+                  </p>
+                )}
               </div>
             </div>
           </div>
 
-          {plan.description && (
-            <div className="plan-detail-section">
-              <h4>Description</h4>
-              <p>{plan.description}</p>
-            </div>
-          )}
-
-          <div className="plan-detail-section">
-            <h4>Info</h4>
-            <p>Category: {plan.category}</p>
-            <p>Priority: {plan.priority}</p>
-            {plan.tags && plan.tags.length > 0 && (
-              <p>Tags: {plan.tags.join(', ')}</p>
-            )}
-          </div>
-
-          <div className="plan-detail-section">
-            <h4>Dates</h4>
-            <p>Created: {formatDate(plan.createdAt)}</p>
-            <p>Updated: {formatDate(plan.updatedAt)}</p>
-            {plan.completedAt && (
-              <p>Completed: {formatDate(plan.completedAt)}</p>
-            )}
-          </div>
-
-          <div className="plan-detail-actions">
-            <button
-              className="btn btn-sm btn-primary"
+          {/* Right column - Actions */}
+          <div className="flex flex-col gap-2">
+            <Button
+              variant="brand"
+              size="sm"
               onClick={() => onStartSession(plan)}
             >
+              <Play className="mr-1 h-4 w-4" />
               Start Session
-            </button>
-            <button
-              className="btn btn-sm btn-ghost"
+            </Button>
+            <Button
+              variant="outline"
+              size="sm"
               onClick={() => onAddNote(plan.filename)}
             >
+              <FileText className="mr-1 h-4 w-4" />
               Add Note
-            </button>
-            <button
-              className="btn btn-sm btn-ghost"
+            </Button>
+            <Button
+              variant="ghost"
+              size="sm"
               onClick={() => {
                 if (window.confirm(`Are you sure you want to archive "${plan.filename}"?`)) {
                   onArchive(plan.filename);
                 }
               }}
             >
+              <Archive className="mr-1 h-4 w-4" />
               Archive
-            </button>
+            </Button>
           </div>
         </div>
-      </div>
+      )}
     </div>
   );
 }

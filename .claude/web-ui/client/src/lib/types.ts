@@ -14,11 +14,13 @@ export interface Plan {
 
 // WebSocket message types
 export type WSMessageType =
+  | 'connected'
   | 'terminal-data'
   | 'session-created'
   | 'session-attached'
   | 'session-exit'
   | 'session-killed'
+  | 'session-error'
   | 'plan-update'
   | 'plan-sync'
   | 'error';
@@ -26,6 +28,18 @@ export type WSMessageType =
 export interface WSMessage {
   type: WSMessageType;
   [key: string]: unknown;
+}
+
+export interface SessionErrorMessage {
+  type: 'session-error';
+  error: string;
+  code?: string;
+}
+
+export interface ServerConnectedMessage {
+  type: 'connected';
+  terminalMode?: string;
+  claudeAvailable?: boolean;
 }
 
 export interface SessionCreatedMessage {
@@ -54,6 +68,7 @@ export interface PlanSyncMessage {
 // Session options
 export interface SessionOptions {
   planPath?: string;
+  planMode?: boolean;
 }
 
 // Filter state

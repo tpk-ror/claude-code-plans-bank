@@ -1,0 +1,204 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    --background: 0 0% 100%;
+    --foreground: 0 0% 10%;
+    --card: 0 0% 100%;
+    --card-foreground: 0 0% 10%;
+    --popover: 0 0% 100%;
+    --popover-foreground: 0 0% 10%;
+    --primary: 239 84% 67%;
+    --primary-foreground: 0 0% 100%;
+    --secondary: 0 0% 96%;
+    --secondary-foreground: 0 0% 10%;
+    --muted: 0 0% 96%;
+    --muted-foreground: 0 0% 45%;
+    --accent: 0 0% 96%;
+    --accent-foreground: 0 0% 10%;
+    --destructive: 0 84% 60%;
+    --destructive-foreground: 0 0% 100%;
+    --border: 0 0% 90%;
+    --input: 0 0% 90%;
+    --ring: 239 84% 67%;
+    --radius: 0.5rem;
+
+    /* Custom semantic colors */
+    --success: 142 71% 45%;
+    --warning: 38 92% 50%;
+    --info: 217 91% 60%;
+
+    /* Status colors */
+    --status-pending: 38 92% 50%;
+    --status-in-progress: 217 91% 60%;
+    --status-completed: 142 71% 45%;
+  }
+
+  .dark {
+    --background: 0 0% 10%;
+    --foreground: 0 0% 90%;
+    --card: 0 0% 15%;
+    --card-foreground: 0 0% 90%;
+    --popover: 0 0% 15%;
+    --popover-foreground: 0 0% 90%;
+    --primary: 239 84% 67%;
+    --primary-foreground: 0 0% 100%;
+    --secondary: 0 0% 18%;
+    --secondary-foreground: 0 0% 90%;
+    --muted: 0 0% 18%;
+    --muted-foreground: 0 0% 55%;
+    --accent: 0 0% 18%;
+    --accent-foreground: 0 0% 90%;
+    --destructive: 0 84% 50%;
+    --destructive-foreground: 0 0% 100%;
+    --border: 0 0% 23%;
+    --input: 0 0% 23%;
+    --ring: 239 84% 67%;
+
+    /* Custom semantic colors */
+    --success: 142 71% 45%;
+    --warning: 38 92% 50%;
+    --info: 217 91% 60%;
+  }
+}
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+
+  body {
+    @apply bg-background text-foreground;
+    font-feature-settings: "rlig" 1, "calt" 1;
+  }
+}
+
+/* Scrollbar styling */
+@layer utilities {
+  .scrollbar-thin {
+    scrollbar-width: thin;
+    scrollbar-color: hsl(var(--border)) transparent;
+  }
+
+  .scrollbar-thin::-webkit-scrollbar {
+    width: 8px;
+    height: 8px;
+  }
+
+  .scrollbar-thin::-webkit-scrollbar-track {
+    background: transparent;
+  }
+
+  .scrollbar-thin::-webkit-scrollbar-thumb {
+    background: hsl(var(--border));
+    border-radius: 4px;
+  }
+
+  .scrollbar-thin::-webkit-scrollbar-thumb:hover {
+    background: hsl(var(--muted-foreground) / 0.5);
+  }
+}
+
+/* Message bubble variants */
+@layer components {
+  .message-bubble {
+    @apply rounded-lg p-4 max-w-[85%];
+  }
+
+  .message-bubble-user {
+    @apply bg-primary text-primary-foreground ml-auto;
+  }
+
+  .message-bubble-assistant {
+    @apply bg-card border border-border;
+  }
+
+  .message-bubble-system {
+    @apply bg-muted text-muted-foreground text-sm italic mx-auto;
+  }
+
+  .message-bubble-tool {
+    @apply bg-secondary border border-border;
+  }
+}
+
+/* Code block styling */
+@layer components {
+  .code-block {
+    @apply relative rounded-lg overflow-hidden;
+  }
+
+  .code-block-header {
+    @apply flex items-center justify-between px-4 py-2 bg-muted/50 text-sm text-muted-foreground border-b border-border;
+  }
+
+  .code-block-content {
+    @apply p-4 overflow-x-auto text-sm;
+  }
+
+  .code-block-content pre {
+    @apply m-0;
+  }
+
+  .code-block-content code {
+    @apply font-mono;
+  }
+}
+
+/* Terminal styling */
+@layer components {
+  .terminal-container {
+    @apply h-full w-full bg-background;
+  }
+
+  .terminal-container .xterm {
+    @apply h-full;
+  }
+
+  .terminal-container .xterm-viewport {
+    @apply scrollbar-thin;
+  }
+}
+
+/* Status badge variants */
+@layer components {
+  .status-badge {
+    @apply inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium;
+  }
+
+  .status-badge-pending {
+    @apply bg-yellow-500/15 text-yellow-500;
+  }
+
+  .status-badge-in-progress {
+    @apply bg-blue-500/15 text-blue-500;
+  }
+
+  .status-badge-completed {
+    @apply bg-green-500/15 text-green-500;
+  }
+}
+
+/* Shimmer loading animation */
+@layer components {
+  .shimmer {
+    @apply animate-shimmer bg-gradient-to-r from-transparent via-muted/50 to-transparent bg-[length:200%_100%];
+  }
+}
+
+/* Tool call styling */
+@layer components {
+  .tool-call {
+    @apply rounded-lg border border-border overflow-hidden;
+  }
+
+  .tool-call-header {
+    @apply flex items-center gap-2 px-3 py-2 bg-muted/30 cursor-pointer hover:bg-muted/50 transition-colors;
+  }
+
+  .tool-call-content {
+    @apply px-3 py-2 text-sm font-mono bg-card;
+  }
+}

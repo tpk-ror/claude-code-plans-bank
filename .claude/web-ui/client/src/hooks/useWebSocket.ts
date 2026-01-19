@@ -52,6 +52,10 @@ export function useWebSocket(options: UseWebSocketOptions = {}): UseWebSocketRet
       const { type, ...data } = message;
 
       switch (type) {
+        case 'connected':
+          // Server confirmed connection - includes diagnostic info
+          emit('server-connected', data);
+          break;
         case 'terminal-data':
           emit('terminal-data', (data as { data: string }).data);
           break;
@@ -69,6 +73,10 @@ export function useWebSocket(options: UseWebSocketOptions = {}): UseWebSocketRet
           setSessionId(null);
           emit('session-killed', data);
           break;
+        case 'session-error':
+          // Session error from server (e.g., Claude CLI not found)
+          emit('session-error', data);
+          break;
         case 'plan-update':
           emit('plan-update', data);
           break;
@@ -79,10 +87,10 @@ export function useWebSocket(options: UseWebSocketOptions = {}): UseWebSocketRet
           emit('error', new Error((data as { message: string }).message));
           break;
         default:
-          console.log('Unknown message type:', type);
+          console.log('[WS] Unknown message type:', type);
       }
     } catch (err) {
-      console.error('Error parsing WebSocket message:', err);
+      console.error('[WS] Error parsing WebSocket message:', err);
     }
   }, [emit]);
 
@@ -94,9 +102,12 @@ export function useWebSocket(options: UseWebSocketOptions = {}): UseWebSocketRet
       }
 
       const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+      // Use environment variable or default to port 3847 (WebSocket server port)
+      const wsPort = import.meta.env.VITE_WS_PORT || '3847';
+      const wsHost = window.location.hostname;
       const url = sessionId
-        ? `${protocol}//${window.location.host}?sessionId=${sessionId}`
-        : `${protocol}//${window.location.host}`;
+        ? `${protocol}//${wsHost}:${wsPort}?sessionId=${sessionId}`
+        : `${protocol}//${wsHost}:${wsPort}`;
 
       console.log('[WS] Connecting to:', url);
       setStatus('connecting');

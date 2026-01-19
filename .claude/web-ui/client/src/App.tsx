@@ -1,11 +1,13 @@
 import { useState, useRef, useEffect, useCallback } from 'react';
-import { clsx } from 'clsx';
-import { useClaudeSession, usePlans } from './hooks';
-import { Header, Sidebar } from './components/layout';
-import { Terminal, TerminalRef } from './components/terminal';
-import { PlanDetail } from './components/plans';
-import { NewPlanModal, AddNoteModal } from './components/modals';
-import type { Plan } from './lib/types';
+import { useClaudeSession, usePlans, useMessages } from '@/hooks';
+import { Header, Sidebar } from '@/components/layout';
+import { Terminal, TerminalRef } from '@/components/terminal';
+import { PlanDetail } from '@/components/plans';
+import { NewPlanModal, AddNoteModal } from '@/components/modals';
+import { ChatPanel, ChatPanelToggle } from '@/components/chat/ChatPanel';
+import { Button } from '@/components/ui/button';
+import { cn } from '@/lib/utils';
+import type { Plan } from '@/lib/types';
 
 function App() {
   // Theme state
@@ -20,6 +22,8 @@ function App() {
   const [showAddNoteModal, setShowAddNoteModal] = useState(false);
   const [noteFilename, setNoteFilename] = useState<string | null>(null);
   const [isSyncing, setIsSyncing] = useState(false);
+  const [chatPanelVisible, setChatPanelVisible] = useState(true);
+  const [chatPanelExpanded, setChatPanelExpanded] = useState(false);
 
   // Terminal ref for imperative access
   const terminalRef = useRef<TerminalRef | null>(null);
@@ -30,10 +34,12 @@ function App() {
   // Plans hook
   const plans = usePlans();
 
-  // Apply theme to body
+  // Messages hook for chat panel
+  const { messages, addRawData, clear: clearMessages, isStreaming } = useMessages();
+
+  // Apply theme to body - use .dark class for ShadCN
   useEffect(() => {
-    document.body.classList.toggle('dark-mode', isDark);
-    document.body.classList.toggle('light-mode', !isDark);
+    document.documentElement.classList.toggle('dark', isDark);
     localStorage.setItem('theme', isDark ? 'dark' : 'light');
   }, [isDark]);
 
@@ -41,9 +47,10 @@ function App() {
   useEffect(() => {
     const unsub = session.onTerminalData((data) => {
       terminalRef.current?.write(data);
+      addRawData(data);
     });
     return unsub;
-  }, [session]);
+  }, [session, addRawData]);
 
   // Handle session exit message
   useEffect(() => {
@@ -63,14 +70,12 @@ function App() {
   // Keyboard shortcuts
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
-      // Ctrl+N: New plan
       if (e.ctrlKey && e.key === 'n') {
         e.preventDefault();
         setShowNewPlanModal(true);
         return;
       }
 
-      // Escape: Focus terminal or close modal
       if (e.key === 'Escape') {
         if (showNewPlanModal || showAddNoteModal) {
           setShowNewPlanModal(false);
@@ -81,7 +86,6 @@ function App() {
         return;
       }
 
-      // Ctrl+B: Toggle sidebar
       if (e.ctrlKey && e.key === 'b') {
         e.preventDefault();
         setSidebarCollapsed((prev) => !prev);
@@ -110,12 +114,29 @@ function App() {
 
   const handleStartSession = useCallback((plan?: Plan) => {
     terminalRef.current?.clear();
+    clearMessages();
     if (plan) {
-      session.startSession({ planPath: `./docs/plans/${plan.filename}` });
+      session.startSession({ planPath: `./docs/plans/${plan.filename}`, planMode: true });
     } else {
-      session.startSession();
+      session.startSession({ planMode: true });
     }
-  }, [session]);
+  }, [session, clearMessages]);
+
+  const handleSendMessage = useCallback((message: string) => {
+    if (session.sessionActive) {
+      session.sendInput(message + '\n');
+    } else if (!session.isStarting) {
+      handleStartSession();
+      const checkAndSend = () => {
+        if (session.sessionActive) {
+          session.sendInput(message + '\n');
+        } else {
+          setTimeout(checkAndSend, 100);
+        }
+      };
+      setTimeout(checkAndSend, 500);
+    }
+  }, [session, handleStartSession]);
 
   const handleCreatePlan = useCallback(
     async (data: { title: string; category: string; description: string; priority: string }) => {
@@ -169,7 +190,7 @@ function App() {
         onToggleTheme={handleToggleTheme}
       />
 
-      <div className="main-container">
+      <div className="flex flex-1 overflow-hidden">
         <Sidebar
           plans={plans.plans}
           selectedPlan={plans.selectedPlan}
@@ -184,51 +205,123 @@ function App() {
           onStatusChange={plans.updateStatus}
         />
 
-        <main className="main-content">
-          <div className="terminal-container">
-            <div className="terminal-header">
-              <span className="terminal-title">Terminal</span>
-              <div className="terminal-actions">
-                <button
-                  className="btn btn-sm btn-ghost"
-                  onClick={() => handleStartSession()}
-                  title="New session"
-                >
-                  + New
-                </button>
-                <button
-                  className="btn btn-sm btn-ghost"
-                  onClick={session.stopSession}
-                  title="End session"
-                  disabled={!session.sessionActive}
-                >
-                  ✕ End
-                </button>
+        <main className="flex flex-1 flex-col overflow-hidden">
+          {/* Terminal + Chat horizontal split */}
+          <div className="flex flex-1 overflow-hidden">
+            {/* Terminal Section */}
+            <div
+              className={cn(
+                'flex flex-1 flex-col transition-all duration-200',
+                chatPanelVisible && !chatPanelExpanded && 'flex-[0.6]'
+              )}
+            >
+              <div className="flex flex-1 flex-col">
+                {/* Terminal Header */}
+                <div className="flex h-10 items-center justify-between border-b border-border bg-card px-3">
+                  <span className="text-xs font-medium text-muted-foreground">Terminal</span>
+                  <div className="flex items-center gap-1">
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      className="h-7 text-xs"
+                      onClick={() => handleStartSession()}
+                    >
+                      + New
+                    </Button>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      className="h-7 text-xs"
+                      onClick={session.stopSession}
+                      disabled={!session.sessionActive}
+                    >
+                      End
+                    </Button>
+                    {!chatPanelVisible && (
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        className="h-7 text-xs"
+                        onClick={() => setChatPanelVisible(true)}
+                      >
+                        Chat
+                      </Button>
+                    )}
+                  </div>
+                </div>
+
+                {/* Terminal Wrapper */}
+                <div className="relative flex-1 overflow-hidden bg-background">
+                  <Terminal
+                    terminalRef={terminalRef}
+                    onData={session.sendInput}
+                    onResize={session.resize}
+                    hasSession={session.sessionActive}
+                    isDark={isDark}
+                  />
+                  <div
+                    className={cn(
+                      'absolute inset-0 flex flex-col items-center justify-center gap-4 bg-background',
+                      (session.sessionActive || session.isStarting) && 'hidden'
+                    )}
+                  >
+                    {session.sessionError ? (
+                      <>
+                        <div className="max-w-sm text-center">
+                          <p className="text-base font-semibold text-destructive">Session Error</p>
+                          <p className="mt-1 text-sm text-muted-foreground">
+                            {session.sessionError.message}
+                          </p>
+                          {session.sessionError.code && (
+                            <p className="mt-1 font-mono text-xs text-muted-foreground">
+                              Code: {session.sessionError.code}
+                            </p>
+                          )}
+                        </div>
+                        <div className="flex gap-2">
+                          <Button
+                            variant="brand"
+                            onClick={() => handleStartSession()}
+                            disabled={session.isStarting}
+                          >
+                            Retry
+                          </Button>
+                          <Button variant="ghost" onClick={session.clearError}>
+                            Dismiss
+                          </Button>
+                        </div>
+                      </>
+                    ) : (
+                      <>
+                        <p className="text-sm text-muted-foreground">No active session</p>
+                        <Button
+                          variant="brand"
+                          onClick={() => handleStartSession()}
+                          disabled={session.isStarting}
+                        >
+                          {session.isStarting ? 'Starting...' : 'Start Claude Session'}
+                        </Button>
+                      </>
+                    )}
+                  </div>
+                </div>
               </div>
             </div>
-            <div className="terminal-wrapper">
-              <Terminal
-                terminalRef={terminalRef}
-                onData={session.sendInput}
-                onResize={session.resize}
-                hasSession={session.sessionActive}
-                isDark={isDark}
-              />
-              <div
-                className={clsx('terminal-placeholder', {
-                  hidden: session.sessionActive || session.isStarting,
-                })}
-              >
-                <p>No active session</p>
-                <button
-                  className="btn btn-primary"
-                  onClick={() => handleStartSession()}
-                  disabled={session.isStarting}
-                >
-                  {session.isStarting ? 'Starting...' : 'Start Claude Session'}
-                </button>
-              </div>
-            </div>
+
+            {/* Chat Panel */}
+            <ChatPanel
+              messages={messages}
+              isStreaming={isStreaming}
+              isVisible={chatPanelVisible}
+              isExpanded={chatPanelExpanded}
+              sessionActive={session.sessionActive}
+              isStarting={session.isStarting}
+              sessionError={session.sessionError}
+              onToggleVisibility={() => setChatPanelVisible((prev) => !prev)}
+              onToggleExpand={() => setChatPanelExpanded((prev) => !prev)}
+              onSendMessage={handleSendMessage}
+              onClearError={session.clearError}
+            />
           </div>
 
           <PlanDetail
@@ -240,6 +333,13 @@ function App() {
             onStatusChange={plans.updateStatus}
           />
         </main>
+
+        {/* Floating toggle button when chat is hidden */}
+        <ChatPanelToggle
+          isVisible={chatPanelVisible}
+          messageCount={messages.length}
+          onClick={() => setChatPanelVisible(true)}
+        />
       </div>
 
       <NewPlanModal

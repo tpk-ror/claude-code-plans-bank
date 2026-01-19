@@ -8,6 +8,16 @@ interface TerminalMessage {
   timestamp: Date;
 }
 
+interface SessionError {
+  message: string;
+  code?: string;
+}
+
+interface ServerInfo {
+  terminalMode?: string;
+  claudeAvailable?: boolean;
+}
+
 interface UseClaudeSessionReturn {
   // Connection state
   connectionStatus: ConnectionStatus;
@@ -18,6 +28,13 @@ interface UseClaudeSessionReturn {
   sessionActive: boolean;
   isStarting: boolean;
   exitCode: number | null;
+
+  // Error state
+  sessionError: SessionError | null;
+  clearError: () => void;
+
+  // Server info
+  serverInfo: ServerInfo | null;
 
   // Terminal messages (for optional chat view)
   messages: TerminalMessage[];
@@ -41,13 +58,28 @@ export function useClaudeSession(): UseClaudeSessionReturn {
   const [exitCode, setExitCode] = useState<number | null>(null);
   const [messages, setMessages] = useState<TerminalMessage[]>([]);
   const [messageId, setMessageId] = useState(0);
+  const [sessionError, setSessionError] = useState<SessionError | null>(null);
+  const [serverInfo, setServerInfo] = useState<ServerInfo | null>(null);
 
   // Track session lifecycle events
   useEffect(() => {
+    // Handle server connection info
+    const unsubServerConnected = ws.on<{ terminalMode?: string; claudeAvailable?: boolean }>(
+      'server-connected',
+      (data) => {
+        setServerInfo({
+          terminalMode: data.terminalMode,
+          claudeAvailable: data.claudeAvailable,
+        });
+        console.log('[Session] Server info:', data);
+      }
+    );
+
     const unsubCreated = ws.on('session-created', () => {
       setSessionActive(true);
       setIsStarting(false);
       setExitCode(null);
+      setSessionError(null);
     });
 
     const unsubAttached = ws.on('session-attached', () => {
@@ -64,11 +96,24 @@ export function useClaudeSession(): UseClaudeSessionReturn {
       setSessionActive(false);
     });
 
+    // Handle session errors
+    const unsubError = ws.on<{ error: string; code?: string }>('session-error', (data) => {
+      console.error('[Session] Error:', data.error, data.code);
+      setSessionError({
+        message: data.error,
+        code: data.code,
+      });
+      setIsStarting(false);
+      setSessionActive(false);
+    });
+
     return () => {
+      unsubServerConnected();
       unsubCreated();
       unsubAttached();
       unsubExit();
       unsubKilled();
+      unsubError();
     };
   }, [ws]);
 
@@ -92,6 +137,7 @@ export function useClaudeSession(): UseClaudeSessionReturn {
   const startSession = useCallback((options: SessionOptions = {}) => {
     setIsStarting(true);
     setExitCode(null);
+    setSessionError(null);
     setMessages([]);
     ws.createSession(options);
   }, [ws]);
@@ -103,6 +149,10 @@ export function useClaudeSession(): UseClaudeSessionReturn {
 
   const clearMessages = useCallback(() => {
     setMessages([]);
+  }, []);
+
+  const clearError = useCallback(() => {
+    setSessionError(null);
   }, []);
 
   const onTerminalData = useCallback((callback: (data: string) => void) => {
@@ -119,6 +169,13 @@ export function useClaudeSession(): UseClaudeSessionReturn {
     sessionActive,
     isStarting,
     exitCode,
+
+    // Error state
+    sessionError,
+    clearError,
+
+    // Server info
+    serverInfo,
 
     // Terminal messages
     messages,
