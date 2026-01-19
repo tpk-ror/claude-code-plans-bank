@@ -1,0 +1,176 @@
+/* Terminal Styles */
+
+.terminal-view {
+  width: 100%;
+  height: 100%;
+  background: #1a1a1a;
+}
+
+/* Override xterm.js default styles for better integration */
+.xterm {
+  padding: 8px;
+  height: 100%;
+}
+
+.xterm-viewport {
+  background: #1a1a1a !important;
+}
+
+.xterm-screen {
+  height: 100%;
+}
+
+/* Custom scrollbar for terminal */
+.xterm-viewport::-webkit-scrollbar {
+  width: 10px;
+}
+
+.xterm-viewport::-webkit-scrollbar-track {
+  background: #1a1a1a;
+}
+
+.xterm-viewport::-webkit-scrollbar-thumb {
+  background: #3a3a3a;
+  border-radius: 5px;
+}
+
+.xterm-viewport::-webkit-scrollbar-thumb:hover {
+  background: #4a4a4a;
+}
+
+/* Light mode terminal adjustments */
+body.light-mode .terminal-view {
+  background: #fafafa;
+}
+
+body.light-mode .xterm-viewport {
+  background: #fafafa !important;
+}
+
+body.light-mode .xterm-viewport::-webkit-scrollbar-track {
+  background: #fafafa;
+}
+
+body.light-mode .xterm-viewport::-webkit-scrollbar-thumb {
+  background: #c0c0c0;
+}
+
+/* Terminal focus indicator */
+.terminal-wrapper:focus-within {
+  outline: none;
+}
+
+.terminal-wrapper:focus-within .terminal-header {
+  border-bottom-color: var(--accent-primary);
+}
+
+/* Cursor styles */
+.xterm .xterm-cursor-layer {
+  z-index: 4;
+}
+
+/* Selection */
+.xterm .xterm-selection div {
+  background: rgba(99, 102, 241, 0.3) !important;
+}
+
+/* Link styles */
+.xterm-underline-1 {
+  text-decoration: underline;
+}
+
+/* Loading state */
+.terminal-loading {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+  color: var(--text-muted);
+}
+
+.terminal-loading .spinner {
+  width: 24px;
+  height: 24px;
+  border: 2px solid var(--border-color);
+  border-top-color: var(--accent-primary);
+  border-radius: 50%;
+  animation: spin 0.8s linear infinite;
+}
+
+/* Connection status indicator in terminal */
+.terminal-status {
+  position: absolute;
+  top: 8px;
+  right: 16px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 8px;
+  background: var(--bg-tertiary);
+  border-radius: var(--radius-sm);
+  font-size: 11px;
+  color: var(--text-muted);
+  z-index: 5;
+  opacity: 0;
+  transition: opacity var(--transition-fast);
+}
+
+.terminal-status.visible {
+  opacity: 1;
+}
+
+.terminal-status .status-indicator {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+}
+
+.terminal-status .status-indicator.connecting {
+  background: var(--accent-warning);
+  animation: pulse 1s infinite;
+}
+
+.terminal-status .status-indicator.connected {
+  background: var(--accent-success);
+}
+
+.terminal-status .status-indicator.disconnected {
+  background: var(--accent-danger);
+}
+
+/* Resize handle for detail panel */
+.resize-handle {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 4px;
+  cursor: ns-resize;
+  background: transparent;
+  transition: background var(--transition-fast);
+}
+
+.resize-handle:hover {
+  background: var(--accent-primary);
+}
+
+/* Bell effect */
+.terminal-bell {
+  animation: bell 0.1s ease-out;
+}
+
+@keyframes bell {
+  0%, 100% {
+    transform: translateX(0);
+  }
+  25% {
+    transform: translateX(-2px);
+  }
+  75% {
+    transform: translateX(2px);
+  }
+}

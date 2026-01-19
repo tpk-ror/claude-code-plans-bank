@@ -5,7 +5,10 @@
   "main": "server/index.js",
   "scripts": {
     "start": "node server/index.js",
-    "dev": "node server/index.js"
+    "dev": "node server/index.js",
+    "dev:react": "cd client && npm run dev",
+    "build": "cd client && npm install && npm run build",
+    "install:client": "cd client && npm install"
   },
   "keywords": [
     "claude",

@@ -9,7 +9,8 @@
   },
   "plans": {
     "directory": "./docs/plans",
-    "archiveDirectory": "./docs/plans/archive"
+    "archiveDirectory": "./docs/plans/archive",
+    "syncFromGlobal": false
   },
   "ui": {
     "theme": "dark",

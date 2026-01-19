@@ -37,11 +37,26 @@ if (!fs.existsSync(archiveDir)) {
 const planService = new PlanService(plansDir, archiveDir);
 const claudeService = new ClaudeService(projectDir, config.claude);
 const fileWatcher = new FileWatcher(plansDir);
-const planSyncService = new PlanSyncService(plansDir);
+
+// Only create sync service if syncFromGlobal is enabled
+const syncFromGlobal = config.plans.syncFromGlobal === true;
+const planSyncService = syncFromGlobal ? new PlanSyncService(plansDir) : null;
 
 // Middleware
 app.use(express.json());
-app.use(express.static(path.join(__dirname, '../client')));
+
+// Determine which client to serve: React build or legacy vanilla JS
+const reactBuildDir = path.join(__dirname, '../client/dist');
+const legacyClientDir = path.join(__dirname, '../client');
+const useReactBuild = fs.existsSync(path.join(reactBuildDir, 'index.html'));
+
+if (useReactBuild) {
+  console.log('[Server] Serving React build from client/dist');
+  app.use(express.static(reactBuildDir));
+} else {
+  console.log('[Server] Serving legacy client (React build not found)');
+  app.use(express.static(legacyClientDir));
+}
 
 // Make services available to routes
 app.locals.planService = planService;
@@ -53,9 +68,18 @@ app.locals.plansDir = plansDir;
 // API routes
 app.use('/api', apiRoutes);
 
-// Serve index.html for root
-app.get('/', (req, res) => {
-  res.sendFile(path.join(__dirname, '../client/index.html'));
+// Serve index.html for all routes (SPA support)
+app.get('*', (req, res, next) => {
+  // Skip API routes
+  if (req.path.startsWith('/api')) {
+    return next();
+  }
+
+  if (useReactBuild) {
+    res.sendFile(path.join(reactBuildDir, 'index.html'));
+  } else {
+    res.sendFile(path.join(legacyClientDir, 'index.html'));
+  }
 });
 
 // WebSocket server
@@ -69,8 +93,10 @@ wss.on('connection', (ws, req) => {
 // Start file watcher
 fileWatcher.start();
 
-// Start plan sync service (watches ~/.claude/plans/)
-planSyncService.start();
+// Start plan sync service only if enabled (watches ~/.claude/plans/)
+if (planSyncService) {
+  planSyncService.start();
+}
 
 // Broadcast plan updates to all connected clients
 fileWatcher.on('change', (event, filename) => {
@@ -87,32 +113,34 @@ fileWatcher.on('change', (event, filename) => {
   });
 });
 
-// Connect plan sync service to Claude session events
-claudeService.on('session-created', (sessionId, session) => {
-  planSyncService.setActiveSession(session);
-});
-
-claudeService.on('session-exit', (sessionId, exitCode, signal, session) => {
-  planSyncService.clearActiveSession();
-});
-
-claudeService.on('session-killed', (sessionId, session) => {
-  planSyncService.clearActiveSession();
-});
-
-// Broadcast sync events to all connected clients
-planSyncService.on('sync', (data) => {
-  const message = JSON.stringify({
-    type: 'plan-sync',
-    ...data
+// Connect plan sync service to Claude session events (only if sync is enabled)
+if (planSyncService) {
+  claudeService.on('session-created', (sessionId, session) => {
+    planSyncService.setActiveSession(session);
   });
 
-  wss.clients.forEach(client => {
-    if (client.readyState === 1) { // WebSocket.OPEN
-      client.send(message);
-    }
+  claudeService.on('session-exit', (sessionId, exitCode, signal, session) => {
+    planSyncService.clearActiveSession();
   });
-});
+
+  claudeService.on('session-killed', (sessionId, session) => {
+    planSyncService.clearActiveSession();
+  });
+
+  // Broadcast sync events to all connected clients
+  planSyncService.on('sync', (data) => {
+    const message = JSON.stringify({
+      type: 'plan-sync',
+      ...data
+    });
+
+    wss.clients.forEach(client => {
+      if (client.readyState === 1) { // WebSocket.OPEN
+        client.send(message);
+      }
+    });
+  });
+}
 
 // Start server
 const PORT = config.server.port || 3847;
@@ -121,28 +149,41 @@ const HOST = config.server.host || 'localhost';
 server.listen(PORT, HOST, () => {
   console.log(`\n🚀 Claude Code Web UI running at http://${HOST}:${PORT}`);
   console.log(`📁 Plans directory: ${plansDir}`);
-  console.log(`📂 Project directory: ${projectDir}\n`);
+  console.log(`📂 Project directory: ${projectDir}`);
+  console.log(`🔄 Global sync: ${syncFromGlobal ? 'enabled' : 'disabled'}\n`);
 });
 
 // Graceful shutdown
-process.on('SIGINT', () => {
+function shutdown() {
   console.log('\n\nShutting down...');
+
+  // Kill all Claude sessions
   claudeService.killAll();
+
+  // Stop file watchers
   fileWatcher.stop();
-  planSyncService.stop();
+  if (planSyncService) planSyncService.stop();
+
+  // Close all WebSocket connections
+  wss.clients.forEach(client => {
+    client.terminate();
+  });
+  wss.close();
+
+  // Close the HTTP server
   server.close(() => {
     console.log('Server closed');
     process.exit(0);
   });
-});
 
-process.on('SIGTERM', () => {
-  claudeService.killAll();
-  fileWatcher.stop();
-  planSyncService.stop();
-  server.close(() => {
+  // Force exit after 2 seconds if graceful shutdown hangs
+  setTimeout(() => {
+    console.log('Force exiting...');
     process.exit(0);
-  });
-});
+  }, 2000);
+}
+
+process.on('SIGINT', shutdown);
+process.on('SIGTERM', shutdown);
 
 module.exports = { app, server };

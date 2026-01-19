@@ -37,9 +37,8 @@ class ClaudeService extends EventEmitter {
     // Build command arguments
     const args = [...(this.config.args || [])];
 
-    if (options.planPath) {
-      args.push('--plan', options.planPath);
-    }
+    // Note: planPath is stored in session for reference but not passed to CLI
+    // Claude Code CLI doesn't support --plan flag
 
     const command = this.config.command || 'claude';
 
