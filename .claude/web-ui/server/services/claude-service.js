@@ -52,7 +52,7 @@ class ClaudeService extends EventEmitter {
     }
 
     this.sessions.set(sessionId, session);
-    this.emit('session-created', sessionId);
+    this.emit('session-created', sessionId, session);
     return session;
   }
 
@@ -104,7 +104,7 @@ class ClaudeService extends EventEmitter {
       session.active = false;
       session.exitCode = exitCode;
       session.exitSignal = signal;
-      this.emit('session-exit', sessionId, exitCode, signal);
+      this.emit('session-exit', sessionId, exitCode, signal, session);
     });
 
     return session;
@@ -154,7 +154,7 @@ class ClaudeService extends EventEmitter {
       session.active = false;
       session.exitCode = code;
       session.exitSignal = signal;
-      this.emit('session-exit', sessionId, code, signal);
+      this.emit('session-exit', sessionId, code, signal, session);
     });
 
     // Handle errors
@@ -230,7 +230,7 @@ class ClaudeService extends EventEmitter {
         session.process.kill('SIGTERM');
       }
       session.active = false;
-      this.emit('session-killed', sessionId);
+      this.emit('session-killed', sessionId, session);
       return true;
     }
     return false;

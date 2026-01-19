@@ -9,18 +9,68 @@ class App {
   }
 
   /**
+   * Update loading step status
+   * @param {string} stepId - Step element ID (without 'step-' prefix)
+   * @param {string} status - 'active', 'complete', or 'error'
+   * @param {string} message - Optional message to display
+   */
+  updateStep(stepId, status, message = null) {
+    const step = document.getElementById(`step-${stepId}`);
+    if (step) {
+      step.className = `loading-step ${status}`;
+      if (message) {
+        step.textContent = message;
+      }
+    }
+  }
+
+  /**
+   * Update the main loading status message
+   * @param {string} message
+   * @param {boolean} isError
+   */
+  updateLoadingStatus(message, isError = false) {
+    const statusEl = document.getElementById('loadingStatus');
+    if (statusEl) {
+      statusEl.textContent = message;
+      statusEl.className = isError ? 'loading-status error' : 'loading-status';
+    }
+    console.log(`[App] ${message}`);
+  }
+
+  /**
+   * Hide loading overlay
+   */
+  hideLoadingOverlay() {
+    const overlay = document.getElementById('loadingOverlay');
+    if (overlay) {
+      overlay.classList.add('hidden');
+    }
+  }
+
+  /**
    * Initialize the application
    */
   async init() {
-    console.log('Initializing Claude Code Web UI...');
+    console.log('[App] Initializing Claude Code Web UI...');
+    this.updateLoadingStatus('Starting initialization...');
+
+    // Mark scripts as loaded (we got here, so scripts loaded)
+    this.updateStep('scripts', 'complete', 'Scripts loaded');
 
     // Initialize WebSocket connection
+    this.updateStep('websocket', 'active', 'Connecting to server...');
+    this.updateLoadingStatus('Connecting to WebSocket server...');
     try {
-      await this.wsClient.connect();
+      await this.wsClient.connect(10000); // 10 second timeout
+      this.updateStep('websocket', 'complete', 'Connected to server');
       this.updateConnectionStatus(true);
     } catch (err) {
-      console.error('Failed to connect WebSocket:', err);
+      console.error('[App] Failed to connect WebSocket:', err);
+      this.updateStep('websocket', 'error', `WebSocket failed: ${err.message}`);
+      this.updateLoadingStatus(`WebSocket connection failed: ${err.message}`, true);
       this.updateConnectionStatus(false);
+      // Continue anyway - some features may still work
     }
 
     // Setup connection status listeners
@@ -28,12 +78,30 @@ class App {
     this.wsClient.on('disconnected', () => this.updateConnectionStatus(false));
 
     // Initialize terminal
-    this.terminalManager = new TerminalManager('terminal', this.wsClient);
-    window.terminalManager = this.terminalManager;
-    this.terminalManager.init();
+    this.updateStep('terminal', 'active', 'Initializing terminal...');
+    this.updateLoadingStatus('Initializing terminal...');
+    try {
+      this.terminalManager = new TerminalManager('terminal', this.wsClient);
+      window.terminalManager = this.terminalManager;
+      this.terminalManager.init();
+      this.updateStep('terminal', 'complete', 'Terminal ready');
+    } catch (err) {
+      console.error('[App] Failed to initialize terminal:', err);
+      this.updateStep('terminal', 'error', `Terminal failed: ${err.message}`);
+      this.updateLoadingStatus(`Terminal initialization failed: ${err.message}`, true);
+    }
 
     // Initialize plans manager
-    await this.plansManager.init();
+    this.updateStep('plans', 'active', 'Loading plans...');
+    this.updateLoadingStatus('Loading plans...');
+    try {
+      await this.plansManager.init();
+      this.updateStep('plans', 'complete', 'Plans loaded');
+    } catch (err) {
+      console.error('[App] Failed to load plans:', err);
+      this.updateStep('plans', 'error', `Plans failed: ${err.message}`);
+      this.updateLoadingStatus(`Failed to load plans: ${err.message}`, true);
+    }
 
     // Setup UI event listeners
     this.setupEventListeners();
@@ -44,7 +112,11 @@ class App {
     // Load theme preference
     this.loadThemePreference();
 
-    console.log('Application initialized');
+    // Hide loading overlay
+    this.updateLoadingStatus('Ready!');
+    setTimeout(() => this.hideLoadingOverlay(), 500);
+
+    console.log('[App] Application initialized');
   }
 
   /**

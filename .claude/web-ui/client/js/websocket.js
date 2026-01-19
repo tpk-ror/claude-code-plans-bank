@@ -14,9 +14,10 @@ class WebSocketClient {
 
   /**
    * Connect to WebSocket server
+   * @param {number} timeout - Connection timeout in ms (default 5000)
    * @returns {Promise<void>}
    */
-  connect() {
+  connect(timeout = 5000) {
     return new Promise((resolve, reject) => {
       const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
       const url = `${protocol}//${window.location.host}`;
@@ -24,10 +25,25 @@ class WebSocketClient {
       // Include session ID if reconnecting
       const fullUrl = this.sessionId ? `${url}?sessionId=${this.sessionId}` : url;
 
+      console.log('[WS] Connecting to:', fullUrl);
+      this.updateStatus('Connecting to WebSocket...');
+
+      // Set connection timeout
+      const timeoutId = setTimeout(() => {
+        console.error('[WS] Connection timeout after', timeout, 'ms');
+        this.updateStatus('WebSocket connection timeout', true);
+        if (this.ws) {
+          this.ws.close();
+        }
+        reject(new Error('WebSocket connection timeout'));
+      }, timeout);
+
       this.ws = new WebSocket(fullUrl);
 
       this.ws.onopen = () => {
-        console.log('WebSocket connected');
+        clearTimeout(timeoutId);
+        console.log('[WS] Connected successfully');
+        this.updateStatus('WebSocket connected');
         this.connected = true;
         this.reconnectAttempts = 0;
         this.emit('connected');
@@ -35,7 +51,8 @@ class WebSocketClient {
       };
 
       this.ws.onclose = (event) => {
-        console.log('WebSocket closed', event.code, event.reason);
+        clearTimeout(timeoutId);
+        console.log('[WS] Closed:', event.code, event.reason);
         this.connected = false;
         this.emit('disconnected', event);
 
@@ -43,13 +60,16 @@ class WebSocketClient {
         if (this.reconnectAttempts < this.maxReconnectAttempts) {
           this.reconnectAttempts++;
           const delay = this.reconnectDelay * this.reconnectAttempts;
-          console.log(`Reconnecting in ${delay}ms (attempt ${this.reconnectAttempts})`);
+          console.log(`[WS] Reconnecting in ${delay}ms (attempt ${this.reconnectAttempts})`);
+          this.updateStatus(`Reconnecting (${this.reconnectAttempts}/${this.maxReconnectAttempts})...`);
           setTimeout(() => this.connect(), delay);
         }
       };
 
       this.ws.onerror = (error) => {
-        console.error('WebSocket error:', error);
+        clearTimeout(timeoutId);
+        console.error('[WS] Error:', error);
+        this.updateStatus('WebSocket error', true);
         this.emit('error', error);
         reject(error);
       };
@@ -59,10 +79,24 @@ class WebSocketClient {
           const message = JSON.parse(event.data);
           this.handleMessage(message);
         } catch (err) {
-          console.error('Error parsing WebSocket message:', err);
+          console.error('[WS] Error parsing message:', err);
         }
       };
     });
+  }
+
+  /**
+   * Update loading status display
+   * @param {string} message
+   * @param {boolean} isError
+   */
+  updateStatus(message, isError = false) {
+    const statusEl = document.getElementById('loadingStatus');
+    if (statusEl) {
+      statusEl.textContent = message;
+      statusEl.className = isError ? 'loading-status error' : 'loading-status';
+    }
+    console.log('[Status]', message);
   }
 
   /**
@@ -97,6 +131,10 @@ class WebSocketClient {
 
       case 'plan-update':
         this.emit('plan-update', data);
+        break;
+
+      case 'plan-sync':
+        this.emit('plan-sync', data);
         break;
 
       case 'error':

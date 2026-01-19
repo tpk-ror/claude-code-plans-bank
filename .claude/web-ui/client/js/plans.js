@@ -10,6 +10,7 @@ class PlansManager {
       category: '',
       search: ''
     };
+    this.syncIndicatorTimeout = null;
   }
 
   /**
@@ -21,6 +22,12 @@ class PlansManager {
 
     // Setup WebSocket plan updates
     this.setupWebSocketListeners();
+
+    // Setup sync indicator
+    this.setupSyncListener();
+
+    // Setup sync button
+    this.setupSyncButton();
 
     // Load initial plans
     await this.loadPlans();
@@ -83,6 +90,141 @@ class PlansManager {
   }
 
   /**
+   * Setup sync listener for Claude plans sync events
+   */
+  setupSyncListener() {
+    window.wsClient.on('plan-sync', (data) => {
+      console.log('Plan sync:', data.event, data.filename, data.status);
+
+      if (data.status === 'success') {
+        this.showSyncIndicator(`Synced: ${data.filename}`);
+      } else if (data.status === 'error') {
+        this.showSyncIndicator(`Sync error: ${data.filename}`, true);
+      }
+    });
+  }
+
+  /**
+   * Show a brief sync indicator message
+   * @param {string} message - The message to display
+   * @param {boolean} isError - Whether this is an error message
+   */
+  showSyncIndicator(message, isError = false) {
+    // Get or create sync indicator element
+    let indicator = document.getElementById('syncIndicator');
+    if (!indicator) {
+      indicator = document.createElement('div');
+      indicator.id = 'syncIndicator';
+      indicator.className = 'sync-indicator';
+      document.body.appendChild(indicator);
+    }
+
+    // Update message and style
+    indicator.textContent = message;
+    indicator.classList.remove('error', 'visible');
+    if (isError) {
+      indicator.classList.add('error');
+    }
+
+    // Show the indicator
+    requestAnimationFrame(() => {
+      indicator.classList.add('visible');
+    });
+
+    // Clear previous timeout
+    if (this.syncIndicatorTimeout) {
+      clearTimeout(this.syncIndicatorTimeout);
+    }
+
+    // Hide after a delay
+    this.syncIndicatorTimeout = setTimeout(() => {
+      indicator.classList.remove('visible');
+    }, 2000);
+  }
+
+  /**
+   * Setup sync button
+   */
+  setupSyncButton() {
+    const syncBtn = document.getElementById('syncPlansBtn');
+    if (syncBtn) {
+      syncBtn.addEventListener('click', () => this.triggerSync());
+    }
+  }
+
+  /**
+   * Trigger manual sync from Claude's plans directory
+   */
+  async triggerSync() {
+    const syncBtn = document.getElementById('syncPlansBtn');
+    if (syncBtn) {
+      syncBtn.disabled = true;
+      syncBtn.textContent = '...';
+    }
+
+    try {
+      const response = await fetch('/api/sync', { method: 'POST' });
+      const data = await response.json();
+
+      if (response.ok) {
+        this.showSyncIndicator('Sync complete');
+        await this.loadPlans();
+      } else {
+        this.showSyncIndicator(`Sync failed: ${data.error}`, true);
+      }
+    } catch (err) {
+      console.error('Error triggering sync:', err);
+      this.showSyncIndicator('Sync failed', true);
+    } finally {
+      if (syncBtn) {
+        syncBtn.disabled = false;
+        syncBtn.textContent = '↻';
+      }
+    }
+  }
+
+  /**
+   * Fetch with timeout wrapper
+   * @param {string} url
+   * @param {Object} options
+   * @param {number} timeout
+   * @returns {Promise<Response>}
+   */
+  async fetchWithTimeout(url, options = {}, timeout = 10000) {
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), timeout);
+
+    try {
+      const response = await fetch(url, {
+        ...options,
+        signal: controller.signal
+      });
+      clearTimeout(timeoutId);
+      return response;
+    } catch (err) {
+      clearTimeout(timeoutId);
+      if (err.name === 'AbortError') {
+        throw new Error(`Request timeout after ${timeout}ms: ${url}`);
+      }
+      throw err;
+    }
+  }
+
+  /**
+   * Update loading status display
+   * @param {string} message
+   * @param {boolean} isError
+   */
+  updateStatus(message, isError = false) {
+    const statusEl = document.getElementById('loadingStatus');
+    if (statusEl) {
+      statusEl.textContent = message;
+      statusEl.className = isError ? 'loading-status error' : 'loading-status';
+    }
+    console.log('[Plans]', message);
+  }
+
+  /**
    * Load plans from API
    */
   async loadPlans() {
@@ -93,18 +235,45 @@ class PlansManager {
       if (this.filters.search) queryParams.set('search', this.filters.search);
 
       const url = `/api/plans?${queryParams.toString()}`;
-      const response = await fetch(url);
+      console.log('[Plans] Fetching plans from:', url);
+      this.updateStatus('Loading plans...');
+
+      const response = await this.fetchWithTimeout(url, {}, 15000);
 
       if (!response.ok) {
         throw new Error(`Failed to load plans: ${response.statusText}`);
       }
 
+      console.log('[Plans] Response received, parsing JSON...');
+      this.updateStatus('Parsing plans data...');
+
       const data = await response.json();
+      console.log('[Plans] Loaded', data.plans?.length || 0, 'plans');
+      this.updateStatus(`Loaded ${data.plans?.length || 0} plans`);
+
       this.plans = data.plans || [];
+
+      console.log('[Plans] Rendering plans...');
+      this.updateStatus('Rendering plans...');
       this.renderPlans();
+
+      this.updateStatus('Ready');
+      // Hide loading overlay after successful load
+      this.hideLoadingOverlay();
     } catch (err) {
-      console.error('Error loading plans:', err);
-      this.showError('Failed to load plans');
+      console.error('[Plans] Error loading plans:', err);
+      this.updateStatus(`Error: ${err.message}`, true);
+      this.showError('Failed to load plans: ' + err.message);
+    }
+  }
+
+  /**
+   * Hide the loading overlay
+   */
+  hideLoadingOverlay() {
+    const overlay = document.getElementById('loadingOverlay');
+    if (overlay) {
+      overlay.classList.add('hidden');
     }
   }
 

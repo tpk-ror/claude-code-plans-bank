@@ -13,6 +13,20 @@
   <link rel="stylesheet" href="css/terminal.css">
 </head>
 <body class="dark-mode">
+  <!-- Loading Overlay with Status -->
+  <div id="loadingOverlay" class="loading-overlay">
+    <div class="loading-content">
+      <div class="loading-spinner"></div>
+      <div id="loadingStatus" class="loading-status">Initializing...</div>
+      <div class="loading-steps">
+        <div id="step-scripts" class="loading-step">Loading scripts...</div>
+        <div id="step-websocket" class="loading-step">Connecting WebSocket...</div>
+        <div id="step-terminal" class="loading-step">Initializing terminal...</div>
+        <div id="step-plans" class="loading-step">Loading plans...</div>
+      </div>
+    </div>
+  </div>
+
   <div id="app">
     <!-- Header -->
     <header class="header">
@@ -41,9 +55,14 @@
       <aside class="sidebar" id="sidebar">
         <div class="sidebar-header">
           <h2>Plans</h2>
-          <button class="btn btn-sm btn-ghost" id="sidebarToggle" title="Toggle sidebar">
-            ◀
-          </button>
+          <div style="display: flex; gap: 4px;">
+            <button class="btn btn-sm btn-ghost" id="syncPlansBtn" title="Sync plans from Claude">
+              ↻
+            </button>
+            <button class="btn btn-sm btn-ghost" id="sidebarToggle" title="Toggle sidebar">
+              ◀
+            </button>
+          </div>
         </div>
 
         <!-- Filters -->
@@ -187,12 +206,63 @@
     </div>
   </div>
 
-  <!-- Scripts -->
-  <script src="https://cdn.jsdelivr.net/npm/xterm@5.3.0/lib/xterm.min.js"></script>
-  <script src="https://cdn.jsdelivr.net/npm/xterm-addon-fit@0.8.0/lib/xterm-addon-fit.min.js"></script>
-  <script src="js/websocket.js"></script>
-  <script src="js/terminal.js"></script>
-  <script src="js/plans.js"></script>
-  <script src="js/app.js"></script>
+  <!-- Early loading status script -->
+  <script>
+    // Track script loading for debugging
+    window.scriptLoadStatus = {};
+    window.updateLoadingStep = function(stepId, status, message) {
+      var step = document.getElementById('step-' + stepId);
+      if (step) {
+        step.className = 'loading-step ' + status;
+        if (message) step.textContent = message;
+      }
+    };
+    window.updateLoadingStatus = function(message, isError) {
+      var el = document.getElementById('loadingStatus');
+      if (el) {
+        el.textContent = message;
+        el.className = isError ? 'loading-status error' : 'loading-status';
+      }
+      console.log('[Loader] ' + message);
+    };
+
+    // Set timeout to detect hung loading
+    window.loadingTimeout = setTimeout(function() {
+      console.error('[Loader] Loading timeout - checking status...');
+      var status = window.scriptLoadStatus;
+      var missing = [];
+      if (!status.xterm) missing.push('xterm.js');
+      if (!status.xtermFit) missing.push('xterm-addon-fit.js');
+      if (!status.websocket) missing.push('websocket.js');
+      if (!status.terminal) missing.push('terminal.js');
+      if (!status.plans) missing.push('plans.js');
+      if (!status.app) missing.push('app.js');
+
+      if (missing.length > 0) {
+        window.updateLoadingStatus('Failed to load: ' + missing.join(', '), true);
+        window.updateLoadingStep('scripts', 'error', 'Script load failed: ' + missing.join(', '));
+      }
+    }, 15000);
+  </script>
+
+  <!-- Scripts with load tracking -->
+  <script src="https://cdn.jsdelivr.net/npm/xterm@5.3.0/lib/xterm.min.js"
+          onload="window.scriptLoadStatus.xterm=true; console.log('[Loader] xterm loaded')"
+          onerror="window.updateLoadingStatus('Failed to load xterm.js from CDN', true); window.updateLoadingStep('scripts', 'error', 'xterm.js CDN failed')"></script>
+  <script src="https://cdn.jsdelivr.net/npm/xterm-addon-fit@0.8.0/lib/xterm-addon-fit.min.js"
+          onload="window.scriptLoadStatus.xtermFit=true; console.log('[Loader] xterm-fit loaded')"
+          onerror="window.updateLoadingStatus('Failed to load xterm-addon-fit.js from CDN', true); window.updateLoadingStep('scripts', 'error', 'xterm-fit CDN failed')"></script>
+  <script src="js/websocket.js"
+          onload="window.scriptLoadStatus.websocket=true; console.log('[Loader] websocket.js loaded')"
+          onerror="window.updateLoadingStatus('Failed to load websocket.js', true)"></script>
+  <script src="js/terminal.js"
+          onload="window.scriptLoadStatus.terminal=true; console.log('[Loader] terminal.js loaded')"
+          onerror="window.updateLoadingStatus('Failed to load terminal.js', true)"></script>
+  <script src="js/plans.js"
+          onload="window.scriptLoadStatus.plans=true; console.log('[Loader] plans.js loaded')"
+          onerror="window.updateLoadingStatus('Failed to load plans.js', true)"></script>
+  <script src="js/app.js"
+          onload="window.scriptLoadStatus.app=true; clearTimeout(window.loadingTimeout); console.log('[Loader] app.js loaded - all scripts ready')"
+          onerror="window.updateLoadingStatus('Failed to load app.js', true)"></script>
 </body>
 </html>

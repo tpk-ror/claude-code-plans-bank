@@ -140,6 +140,9 @@ main() {
     print_msg "$BLUE" "╚═══════════════════════════════════════╝"
     echo ""
 
+    # Remember the original working directory (project root)
+    PROJECT_DIR="$(pwd)"
+
     # Check requirements
     check_node
     check_npm
@@ -161,7 +164,7 @@ main() {
     echo ""
 
     cd "$WEB_UI_DIR"
-    PORT=$PORT HOST=$HOST node server/index.js
+    PROJECT_DIR="$PROJECT_DIR" PORT=$PORT HOST=$HOST node server/index.js
 }
 
 # Handle Ctrl+C gracefully

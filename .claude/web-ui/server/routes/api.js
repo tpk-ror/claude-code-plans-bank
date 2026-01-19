@@ -229,4 +229,39 @@ router.get('/config', (req, res) => {
   });
 });
 
+// POST /api/sync - Trigger manual sync from Claude's plans directory
+router.post('/sync', (req, res) => {
+  const planSyncService = req.app.locals.planSyncService;
+
+  if (!planSyncService) {
+    return res.status(503).json({ error: 'Plan sync service not available' });
+  }
+
+  try {
+    planSyncService.syncAllExisting();
+    res.json({
+      success: true,
+      message: 'Sync triggered',
+      status: planSyncService.getStatus()
+    });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// GET /api/sync/status - Get sync status
+router.get('/sync/status', (req, res) => {
+  const planSyncService = req.app.locals.planSyncService;
+
+  if (!planSyncService) {
+    return res.status(503).json({ error: 'Plan sync service not available' });
+  }
+
+  try {
+    res.json(planSyncService.getStatus());
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 module.exports = router;
